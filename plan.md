@@ -5,5 +5,5 @@ ECS implementation allowing for multithreaded systems. *Potential expansion:* sy
 ## Tasks
 
 - [x] Hello world
-- [ ] Manual world + system
+- [x] Manual world + system
 - [ ] Automatic world + system
