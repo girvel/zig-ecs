@@ -1,11 +1,13 @@
 const std = @import("std");
+const vector = @import("vector.zig");
+const i32_2 = vector.Vector(i32, 2);
 
-const ContainsY = struct {
-    y: *i32,
+const Positioned = struct {
+    position: *i32_2,
 };
 
-fn display_y(entity: ContainsY) void {
-    std.debug.print("y = {}\n", .{entity.y.*});
+fn display_y(entity: Positioned) void {
+    std.debug.print("pos = {}\n", .{entity.position});
 }
 
 fn BuildWorld(only_system: anytype) type {
@@ -54,17 +56,17 @@ pub fn main() !void {
 
     // TODO .init
     var world = BuildWorld(display_y) {
-        .ys = std.ArrayList(i32).init(allocator),
-        .display_y_subjects = std.ArrayList(ContainsY).init(allocator),
+        .ys = std.ArrayList(i32_2).init(allocator),
+        .display_y_subjects = std.ArrayList(Positioned).init(allocator),
     };
 
     world.add(.{
-        .y = @as(i32, 32),
-        .x = 0,
+        .position = i32_2.from_array([_]i32{3, 4}),
+        .depth = 3,
     });
 
     world.add(.{
-        .y = @as(i32, 16),
+        .position = i32_2.from_array([_]i32{3, 5}),
         .name = "Kitty",
     });
 
