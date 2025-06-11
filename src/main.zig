@@ -55,3 +55,7 @@ pub fn main() !void {
     world.update();
     world.update();
 }
+
+test {
+    std.testing.refAllDeclsRecursive(@This());
+}

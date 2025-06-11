@@ -1,8 +1,9 @@
 const std = @import("std");
+const toolkit = @import("toolkit.zig");
 const StructField = std.builtin.Type.StructField;
 
 const Component = struct {name: [:0]const u8, type: type};
-const Trait = struct {name: [:0]const u8, type: type, components: []Component};
+const Trait = struct {name: [:0]const u8, type: type, components: []const Component};
 
 pub fn BuildWorld(comptime only_system: anytype) type {
     const traits = blk: {
@@ -11,7 +12,7 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         for (&result, params) |*trait, param| {
             trait.type = param.type orelse unreachable;
             trait.name = @typeName(trait.type);
-            trait.components = &components: {
+            const components = components: {
                 const argument_fields = @typeInfo(trait.type).Struct.fields;
                 var components: [argument_fields.len]Component = undefined;
                 for (&components, argument_fields) |*component, field| {
@@ -23,6 +24,7 @@ pub fn BuildWorld(comptime only_system: anytype) type {
                 }
                 break :components components;
             };
+            trait.components = &components;
         }
         break :blk result;
     };
@@ -92,9 +94,10 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         entities: EntityStorage,
 
         const Self = @This();
+        const traits_const = traits;
         pub fn init(allocator: std.mem.Allocator) Self {
             var result: Self = undefined;
-            inline for (traits) |trait| {
+            inline for (traits_const) |trait| {
                 @field(result.entities, trait.name) = std.ArrayList(trait.type).init(allocator);
                 inline for (trait.components) |component| {  // TODO use all_components
                     @field(result.components, component.name)
@@ -107,7 +110,7 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         pub fn add(self: *Self, entity: anytype) void {
             const t = @TypeOf(entity);
 
-            inline for (traits) |trait| {
+            inline for (traits_const) |trait| {
                 inline for (trait.components) |component| {
                     if (!@hasField(t, component.name)) break;
                     if (@TypeOf(@field(entity, component.name)) != component.type) {
@@ -124,16 +127,19 @@ pub fn BuildWorld(comptime only_system: anytype) type {
                         const items = @field(self.components, component.name).items;
                         @field(subject, component.name) = &items[items.len - 1];
                     }
-                    self.entities.append(subject) catch unreachable;
+                    @field(self.entities, trait.name).append(subject) catch unreachable;
                 }
             }
         }
 
         pub fn update(self: *Self) void {
-            for (self.entities.@"main.Inert".items) |e1| {
-                for (self.entities.@"main.Constants".items) |e2| {
-                    @call(.auto, only_system, .{e1, e2});
-                }
+            var iterator = toolkit.cartesian(.{
+                self.entities.@"main.Inert".items,
+                self.entities.@"main.Constants".items,
+            });
+
+            while (iterator.next()) |entry| {
+                @call(.auto, only_system, entry);
             }
         }
     };
