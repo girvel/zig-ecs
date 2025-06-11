@@ -4,6 +4,7 @@ const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
 
 // TODO managing stuff like strings?
+// TODO const references in traits?
 
 
 const Inert = struct {
@@ -11,8 +12,13 @@ const Inert = struct {
     velocity: *i32_2,
 };
 
-fn display_y(entity: Inert) void {
+const Constants = struct {
+    g: *i32_2,
+};
+
+fn only_system(entity: Inert, constants: Constants) void {
     std.debug.print("p = {}, v = {}\n", .{entity.position, entity.velocity});
+    entity.velocity.add_mut(constants.g.*);
     entity.position.add_mut(entity.velocity.*);
 }
 
@@ -21,17 +27,17 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var world = ecs.BuildWorld(display_y).init(allocator);
+    var world = ecs.BuildWorld(only_system).init(allocator);
 
     world.add(.{
-        .position = i32_2.from_array(.{3, 4}),
-        .velocity = i32_2.from_array(.{-1, 0}),
+        .position = i32_2.from_array(.{0, 0}),
+        .velocity = i32_2.from_array(.{1, 0}),
         .mass = @as(i32, 8),
         .depth = 3,
     });
 
     world.add(.{
-        .position = i32_2.from_array(.{3, 5}),
+        .position = i32_2.from_array(.{0, 0}),
         .velocity = i32_2.from_array(.{1, 1}),
         .mass = @as(i32, 3),
         .name = "Kitty",
@@ -39,6 +45,10 @@ pub fn main() !void {
 
     world.add(.{
         .mass = 2,
+    });
+
+    world.add(.{
+        .g = i32_2.from_array(.{0, 10}),
     });
 
     world.update();
