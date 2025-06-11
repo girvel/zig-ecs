@@ -1,41 +1,79 @@
 const std = @import("std");
 
 pub fn BuildWorld(only_system: anytype) type {
-    const system_info = @typeInfo(@TypeOf(only_system));
-    const Argument: type = system_info.Fn.params[0].type orelse unreachable;
-    const argument_only_field: std.builtin.Type.StructField
-        = @typeInfo(Argument).Struct.fields[0];
-    const field_name = argument_only_field.name;
+    const Argument = @typeInfo(@TypeOf(only_system)).Fn.params[0].type orelse unreachable;
+    const Component = struct {name: [:0]const u8, type: type};
+    const argument_fields = @typeInfo(Argument).Struct.fields;
+    const required_components: [argument_fields.len]Component = blk: {
+        var result: [argument_fields.len]Component = undefined;
+        for (&result, argument_fields) |*component, field| {
+            component.* = .{
+                .name = field.name,
+                .type = @typeInfo(field.type).Pointer.child,
+                // TODO compile error if not a pointer
+            };
+        }
+        break :blk result;
+    };
 
-    // TODO compile error if not a pointer
-    const FieldType = @typeInfo(argument_only_field.type).Pointer.child;
+    const storage_fields = blk: {
+        var result: [required_components.len]std.builtin.Type.StructField = undefined;
+        for (&result, required_components) |*field, component| {
+            const List = std.ArrayList(component.type);
+            field.* = .{
+                .name = component.name,
+                .type = List,
+                .default_value = null,
+                .is_comptime = false,
+                .alignment = @alignOf(List),
+            };
+        }
+        break :blk result;
+    };
+
+    const Storage = @Type(.{ .Struct = .{
+        .layout = .auto,
+        .fields = &storage_fields,
+        .decls = &.{},
+        .is_tuple = false,
+    }});
 
     return struct {
         // TODO world contains components, systems contain entities
-        components: std.ArrayList(FieldType),
+        storage: Storage,
         entities: std.ArrayList(Argument),
 
         const Self = @This();
         pub fn init(allocator: std.mem.Allocator) Self {
             return Self {
-                .components = std.ArrayList(FieldType).init(allocator),
                 .entities = std.ArrayList(Argument).init(allocator),
+                .storage = .{
+                    .position = std.ArrayList(required_components[0].type).init(allocator),
+                    .velocity = std.ArrayList(required_components[1].type).init(allocator),
+                    // TODO initialize non-manually
+                },
             };
         }
 
         pub fn add(self: *Self, entity: anytype) void {
             const t = @TypeOf(entity);
-            if (@hasField(t, field_name)) {
-                if (@TypeOf(@field(entity, field_name)) != FieldType) {
+
+            inline for (required_components) |component| {
+                if (!@hasField(t, component.name)) break;
+                if (@TypeOf(@field(entity, component.name)) != component.type) {
                     @compileError(
-                        "entity's ." ++ field_name ++
-                        " should be of type " ++ @typeName(FieldType)
+                        "entity's ." ++ component.name ++
+                        " should be of type " ++ @typeName(component.type)
                     );
                 }
-
-                self.components.append(@field(entity, field_name)) catch unreachable;
+            } else {
                 var subject: Argument = undefined;
-                @field(subject, field_name) = &self.components.items[self.components.items.len - 1];
+                inline for (required_components) |component| {
+                    @field(self.storage, component.name).append(@field(entity, component.name))
+                        catch unreachable;
+                    const items = @field(self.storage, component.name).items;
+                    @field(subject, component.name) = &items[items.len - 1];
+                }
                 self.entities.append(subject) catch unreachable;
             }
         }
