@@ -45,14 +45,13 @@ pub fn BuildWorld(only_system: anytype) type {
 
         const Self = @This();
         pub fn init(allocator: std.mem.Allocator) Self {
-            return Self {
-                .entities = std.ArrayList(Argument).init(allocator),
-                .storage = .{
-                    .position = std.ArrayList(required_components[0].type).init(allocator),
-                    .velocity = std.ArrayList(required_components[1].type).init(allocator),
-                    // TODO initialize non-manually
-                },
-            };
+            var result: Self = undefined;
+            result.entities = std.ArrayList(Argument).init(allocator);
+            inline for (required_components) |component| {
+                @field(result.storage, component.name)
+                    = std.ArrayList(component.type).init(allocator);
+            }
+            return result;
         }
 
         pub fn add(self: *Self, entity: anytype) void {
