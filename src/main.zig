@@ -24,15 +24,15 @@ pub fn main() !void {
     var world = ecs.BuildWorld(display_y).init(allocator);
 
     world.add(.{
-        .position = i32_2.from_array([_]i32{3, 4}),
-        .velocity = i32_2.from_array([_]i32{-1, 0}),
+        .position = i32_2.from_array(.{3, 4}),
+        .velocity = i32_2.from_array(.{-1, 0}),
         .mass = @as(i32, 8),
         .depth = 3,
     });
 
     world.add(.{
-        .position = i32_2.from_array([_]i32{3, 5}),
-        .velocity = i32_2.from_array([_]i32{1, 1}),
+        .position = i32_2.from_array(.{3, 5}),
+        .velocity = i32_2.from_array(.{1, 1}),
         .mass = @as(i32, 3),
         .name = "Kitty",
     });
