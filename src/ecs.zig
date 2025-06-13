@@ -3,7 +3,7 @@ const toolkit = @import("toolkit.zig");
 const StructField = std.builtin.Type.StructField;
 
 const Component = struct {name: [:0]const u8, type: type};
-const Trait = struct {name: [:0]const u8, type: type, components: []const Component};
+const Trait = struct {type: type, components: []const Component};
 
 pub fn BuildWorld(comptime only_system: anytype) type {
     const traits = blk: {
@@ -11,7 +11,6 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         var result: [params.len]Trait = undefined;
         for (&result, params) |*trait, param| {
             trait.type = param.type orelse unreachable;
-            trait.name = @typeName(trait.type);
             const components = components: {
                 const argument_fields = @typeInfo(trait.type).Struct.fields;
                 var components: [argument_fields.len]Component = undefined;
@@ -67,10 +66,10 @@ pub fn BuildWorld(comptime only_system: anytype) type {
     const es_fields = blk: {
         comptime var result: [traits.len]StructField = undefined;
         
-        for (&result, traits) |*field, trait| {
+        for (0.., &result, traits) |i, *field, trait| {
             const List = std.ArrayList(trait.type);
             field.* = .{  // TODO check for collisions
-                .name = trait.name,
+                .name = std.fmt.comptimePrint("{}", .{i}),
                 .type = List,
                 .default_value = null,
                 .is_comptime = false,
@@ -85,7 +84,7 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         .layout = .auto,
         .fields = &es_fields,
         .decls = &.{},
-        .is_tuple = false,
+        .is_tuple = true,
     }});
 
     return struct {
@@ -94,11 +93,10 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         entities: EntityStorage,
 
         const Self = @This();
-        const traits_const = traits;
         pub fn init(allocator: std.mem.Allocator) Self {
             var result: Self = undefined;
-            inline for (traits_const) |trait| {
-                @field(result.entities, trait.name) = std.ArrayList(trait.type).init(allocator);
+            inline for (0.., traits) |i, trait| {
+                result.entities[i] = std.ArrayList(trait.type).init(allocator);
                 inline for (trait.components) |component| {  // TODO use all_components
                     @field(result.components, component.name)
                         = std.ArrayList(component.type).init(allocator);
@@ -110,7 +108,7 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         pub fn add(self: *Self, entity: anytype) void {
             const t = @TypeOf(entity);
 
-            inline for (traits_const) |trait| {
+            inline for (0.., traits) |i, trait| {
                 inline for (trait.components) |component| {
                     if (!@hasField(t, component.name)) break;
                     if (@TypeOf(@field(entity, component.name)) != component.type) {
@@ -127,15 +125,36 @@ pub fn BuildWorld(comptime only_system: anytype) type {
                         const items = @field(self.components, component.name).items;
                         @field(subject, component.name) = &items[items.len - 1];
                     }
-                    @field(self.entities, trait.name).append(subject) catch unreachable;
+                    self.entities[i].append(subject) catch unreachable;
                 }
             }
         }
 
         pub fn update(self: *Self) void {
+            // const TupleOfSlices = blk: {
+            //     const fields = fields: {
+            //         const array_lists = @typeInfo(@TypeOf(self.entities)).Struct.fields;
+            //         comptime var fields: [storage_fields.len]StructField;
+            //         for (&fields, array_lists) |field, array_list| {
+            //             field.* = .{
+            //                 .name = std.fmt.comptimePrint("{}", .{i}),
+            //                 .type = ,
+            //                 .default_value = null,
+            //                 .is_comptime = false,
+            //                 .alignment = @alignOf(List),
+            //             };
+            //         }
+            //         break :fields fields;
+            //     }
+            //     comptime var result: = undefined;
+            //     break :blk result;
+            // };
+
+            // var iterator = toolkit.cartesian(self.entities);
+            
             var iterator = toolkit.cartesian(.{
-                self.entities.@"main.Inert".items,
-                self.entities.@"main.Constants".items,
+                self.entities[0].items,
+                self.entities[1].items,
             });
 
             while (iterator.next()) |entry| {

@@ -9,5 +9,6 @@ ECS implementation allowing for multithreaded systems. *Potential expansion:* sy
 - [ ] Mono-world -> multi-world
   - [x] Multiple components required
   - [x] Multiple arguments in a system
+  - [ ] System as a separate entity
+  - [ ] System-level threading
   - [ ] Multiple systems in a world
-- [ ] Automatic world + system
