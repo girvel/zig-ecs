@@ -131,35 +131,46 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         }
 
         pub fn update(self: *Self) void {
-            // const TupleOfSlices = blk: {
-            //     const fields = fields: {
-            //         const array_lists = @typeInfo(@TypeOf(self.entities)).Struct.fields;
-            //         comptime var fields: [storage_fields.len]StructField;
-            //         for (&fields, array_lists) |field, array_list| {
-            //             field.* = .{
-            //                 .name = std.fmt.comptimePrint("{}", .{i}),
-            //                 .type = ,
-            //                 .default_value = null,
-            //                 .is_comptime = false,
-            //                 .alignment = @alignOf(List),
-            //             };
-            //         }
-            //         break :fields fields;
-            //     }
-            //     comptime var result: = undefined;
-            //     break :blk result;
-            // };
+            const TupleOfSlices = blk: {
+                const fields = fields: {
+                    comptime var fields: [es_fields.len]StructField = undefined;
+                    inline for (0.., &fields, es_fields) |i, *field, es_field| {
+                        const T = ListToSlice(es_field.type);  // TODO zip
+                        field.* = .{
+                            .name = std.fmt.comptimePrint("{}", .{i}),
+                            .type = T,
+                            .default_value = null,
+                            .is_comptime = false,
+                            .alignment = @alignOf(T),
+                        };
+                    }
+                    break :fields fields;
+                };
+                
+                break :blk @Type(.{.Struct = .{
+                    .layout = .auto,
+                    .fields = &fields,
+                    .decls = &.{},
+                    .is_tuple = true,
+                }});
+            };
 
-            // var iterator = toolkit.cartesian(self.entities);
+            var to_iterate: TupleOfSlices = undefined;
+            inline for (0..self.entities.len) |i| {
+                to_iterate[i] = self.entities[i].items;
+            }
+
+            var iterator = toolkit.cartesian(to_iterate);
             
-            var iterator = toolkit.cartesian(.{
-                self.entities[0].items,
-                self.entities[1].items,
-            });
-
             while (iterator.next()) |entry| {
                 @call(.auto, only_system, entry);
             }
         }
     };
+}
+
+fn ListToSlice(comptime List: type) type {
+    return for (@typeInfo(List).Struct.fields) |f| {
+        if (std.mem.eql(u8, f.name, "items")) break f.type;
+    } else unreachable;
 }
