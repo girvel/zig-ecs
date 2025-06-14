@@ -16,13 +16,23 @@ const Constants = struct {
     g: *i32_2,
 };
 
+const up_ish = i32_2.from_array(.{12, -44});
+const down_ish = i32_2.from_array(.{-44, 89});
+
 fn only_system(entity: Inert, constants: Constants) void {
-    entity.velocity.add_mut(constants.g.*);
-    entity.position.add_mut(entity.velocity.*);
+    var p = entity.position;
+    var v = entity.velocity;
+
+    inline for (0..100) |_| {
+        v.add_mut(if (p.items[1] > 0) down_ish else up_ish);
+    }
+
+    v.add_mut(constants.g.*);
+    p.add_mut(v.*);
 }
 
 
-const ENTITIES_N = 10_000_000;
+const ENTITIES_N = 1_000_000;
 const TICKS = 10;
 
 pub fn main() !void {

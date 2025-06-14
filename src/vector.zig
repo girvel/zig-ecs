@@ -1,19 +1,22 @@
 const std = @import("std");
 const testing = std.testing;
 
-pub fn Vector(comptime element_type: type, comptime length: usize) type {
+// TODO handle ElementType changes s. a. in magnitude (int -> float), normalization (definitely
+// int -> float), division (often int -> float)
+
+pub fn Vector(comptime ElementType: type, comptime length: usize) type {
     return struct {
-        items: [length]element_type,
+        items: [length]ElementType,
 
         const Self = @This();
 
-        pub fn from_array(items: [length]element_type) Self {
+        pub fn from_array(items: [length]ElementType) Self {
             return Self { .items = items };
         }
 
-        pub fn filled_with(value: element_type) Self {
+        pub fn filled_with(value: ElementType) Self {
             return Self {
-                .items = [_]element_type{value} ** length,
+                .items = [_]ElementType{value} ** length,
             };
         }
 
@@ -29,7 +32,28 @@ pub fn Vector(comptime element_type: type, comptime length: usize) type {
             return result;
         }
 
-        pub fn swizzle(self: Self, comptime literal: []const u8) Vector(element_type, literal.len) {
+        pub fn mul_mut(self: *Self, other: ElementType) void {
+            for (&self.items) |*a| {
+                a.* *= other;
+            }
+        }
+
+        pub fn mul(self: Self, other: ElementType) Self {
+            var result = self;
+            result.mul_mut(other);
+            return result;
+        }
+
+        pub fn magnitude(self: Self) f64 {
+            var sum: ElementType = 0;
+            for (self.items) |e| {
+                sum += e * e;
+            }
+            // TODO handle different combinations of float & int ElementType & Out-type
+            return std.math.sqrt(@as(f64, @floatFromInt(sum)));
+        }
+
+        pub fn swizzle(self: Self, comptime literal: []const u8) Vector(ElementType, literal.len) {
             const indices = comptime blk: {
                 var result: [literal.len]usize = undefined;
                 if (literal.len == 0) break :blk result;
@@ -44,7 +68,7 @@ pub fn Vector(comptime element_type: type, comptime length: usize) type {
                 break :blk result;
             };
 
-            var result = Vector(element_type, literal.len) {
+            var result = Vector(ElementType, literal.len) {
                 .items = undefined,
             };
 
