@@ -131,28 +131,12 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         }
 
         pub fn update(self: *Self) void {
-            const TupleOfSlices = blk: {
-                const fields = fields: {
-                    comptime var fields: [es_fields.len]StructField = undefined;
-                    inline for (0.., &fields, es_fields) |i, *field, es_field| {
-                        const T = ListToSlice(es_field.type);  // TODO zip
-                        field.* = .{
-                            .name = std.fmt.comptimePrint("{}", .{i}),
-                            .type = T,
-                            .default_value = null,
-                            .is_comptime = false,
-                            .alignment = @alignOf(T),
-                        };
-                    }
-                    break :fields fields;
-                };
-                
-                break :blk @Type(.{.Struct = .{
-                    .layout = .auto,
-                    .fields = &fields,
-                    .decls = &.{},
-                    .is_tuple = true,
-                }});
+            const TupleOfSlices = comptime blk: {
+                var result: [es_fields.len]type = undefined;
+                for (&result, es_fields) |*r, s| {
+                    r.* = ListToSlice(s.type);
+                }
+                break :blk std.meta.Tuple(&result);
             };
 
             var to_iterate: TupleOfSlices = undefined;
