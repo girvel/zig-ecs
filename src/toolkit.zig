@@ -5,33 +5,17 @@ fn Cartesian(comptime slice_types: type) type {
     const slice_tuple_fields = @typeInfo(slice_types).Struct.fields;
     const len = slice_tuple_fields.len;
     const IteratorReturn = blk: {
-        const fields = fields: {
-            var fs: [len]StructField = undefined;
-            for (slice_tuple_fields, 0..) |field, i| {
-                var T = @typeInfo(field.type).Pointer.child;
-                switch (@typeInfo(T)) {
-                    .Array => |Array| {
-                        T = Array.child;
-                    },
-                    else => {},
-                }
-                fs[i] = .{
-                    .name = std.fmt.comptimePrint("{}", .{i}),
-                    .type = T,
-                    .default_value = null,
-                    .is_comptime = false,
-                    .alignment = @alignOf(T),
-                };
+        var fs: [len]type = undefined;
+        for (&fs, slice_tuple_fields) |*f, field| {
+            f.* = @typeInfo(field.type).Pointer.child;
+            switch (@typeInfo(f.*)) {
+                .Array => |Array| {
+                    f.* = Array.child;
+                },
+                else => {},
             }
-            break :fields fs;
-        };
-
-        break :blk @Type(.{ .Struct = .{
-            .layout = .auto,
-            .fields = &fields,
-            .decls = &.{},
-            .is_tuple = true,
-        }});
+        }
+        break :blk std.meta.Tuple(&fs);
     };
     
     return struct {
