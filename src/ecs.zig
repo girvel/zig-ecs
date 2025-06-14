@@ -28,7 +28,7 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         break :blk result;
     };
 
-    const cs_fields = blk: {
+    const ComponentStorage = blk: {
         comptime var size = 0;
         for (traits) |trait| {
             for (trait.components) |_| {
@@ -36,56 +36,31 @@ pub fn BuildWorld(comptime only_system: anytype) type {
             }
         }
 
-        var result: [size]StructField = undefined;
+        var result: [size]toolkit.Field = undefined;
         var i = 0;
         
         for (traits) |trait| {
             for (trait.components) |component| {
-                const List = std.ArrayList(component.type);
                 result[i] = .{  // TODO check for collisions
                     .name = component.name,
-                    .type = List,
-                    .default_value = null,
-                    .is_comptime = false,
-                    .alignment = @alignOf(List),
+                    .type = std.ArrayList(component.type),
                 };
                 i += 1;
             }
         }
 
-        break :blk result;
+        break :blk toolkit.Struct(&result);
     };
 
-    const ComponentStorage = @Type(.{ .Struct = .{
-        .layout = .auto,
-        .fields = &cs_fields,
-        .decls = &.{},
-        .is_tuple = false,
-    }});
-
-    const es_fields = blk: {
-        comptime var result: [traits.len]StructField = undefined;
-        
-        for (0.., &result, traits) |i, *field, trait| {
-            const List = std.ArrayList(trait.type);
-            field.* = .{  // TODO check for collisions
-                .name = std.fmt.comptimePrint("{}", .{i}),
-                .type = List,
-                .default_value = null,
-                .is_comptime = false,
-                .alignment = @alignOf(List),
-            };
+    const es_types = blk: {
+        comptime var result: [traits.len]type = undefined;
+        for (&result, traits) |*r, t| {
+            r.* = std.ArrayList(t.type);
         }
-
         break :blk result;
     };
 
-    const EntityStorage = @Type(.{ .Struct = .{
-        .layout = .auto,
-        .fields = &es_fields,
-        .decls = &.{},
-        .is_tuple = true,
-    }});
+    const EntityStorage = std.meta.Tuple(&es_types);
 
     return struct {
         // TODO world contains components, systems contain entities
@@ -132,9 +107,9 @@ pub fn BuildWorld(comptime only_system: anytype) type {
 
         pub fn update(self: *Self) void {
             const TupleOfSlices = comptime blk: {
-                var result: [es_fields.len]type = undefined;
-                for (&result, es_fields) |*r, s| {
-                    r.* = ListToSlice(s.type);
+                var result: [es_types.len]type = undefined;
+                for (&result, es_types) |*r, s| {
+                    r.* = ListToSlice(s);
                 }
                 break :blk std.meta.Tuple(&result);
             };
