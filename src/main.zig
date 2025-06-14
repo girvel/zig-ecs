@@ -31,14 +31,18 @@ pub fn main() !void {
 
     var world = ecs.BuildWorld(only_system, null).init(allocator);
 
-    for (0..ENTITIES_N) |i| {
+    // TODO handle dangling pointers bug
+    world.components.position.ensureTotalCapacity(ENTITIES_N) catch unreachable;
+    world.components.velocity.ensureTotalCapacity(ENTITIES_N) catch unreachable;
+
+    for (0..ENTITIES_N) |_| {
         const  x = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
         const  y = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
         const vx = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
         const vy = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
         world.add(.{
-            .position = i32_2.from_array(.{i, i}),
-            .velocity = i32_2.from_array(.{i, i}),
+            .position = i32_2.from_array(.{x, y}),
+            .velocity = i32_2.from_array(.{vx, vy}),
         });
     }
 
