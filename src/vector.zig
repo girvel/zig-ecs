@@ -18,6 +18,7 @@ pub fn Vector(comptime element_type: type, comptime length: usize) type {
         }
 
         pub fn add_mut(self: *Self, other: Self) void {
+            std.debug.print("{} + {}\n", .{self, other});
             for (&self.items, other.items) |*a, b| {
                 a.* += b;
             }

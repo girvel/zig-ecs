@@ -17,35 +17,34 @@ const Constants = struct {
 };
 
 fn only_system(entity: Inert, constants: Constants) void {
-    std.debug.print("p = {}, v = {}\n", .{entity.position, entity.velocity});
+    std.debug.print("g = {}\n", .{constants.g.*});
     entity.velocity.add_mut(constants.g.*);
     entity.position.add_mut(entity.velocity.*);
 }
 
 
+const ENTITIES_N = 100;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var world = ecs.BuildWorld(only_system).init(allocator);
+    var world = ecs.BuildWorld(only_system, null).init(allocator);
 
-    world.add(.{
-        .position = i32_2.from_array(.{0, 0}),
-        .velocity = i32_2.from_array(.{1, 0}),
-        .mass = @as(i32, 8),
-        .depth = 3,
-    });
-
-    world.add(.{
-        .position = i32_2.from_array(.{0, 0}),
-        .velocity = i32_2.from_array(.{1, 1}),
-        .mass = @as(i32, 3),
-        .name = "Kitty",
-    });
-
-    world.add(.{
-        .mass = 2,
-    });
+    for (0..ENTITIES_N) |_| {
+        const  x = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
+        const  y = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
+        const vx = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
+        const vy = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
+        std.debug.print("{} {}\n", .{
+            i32_2.from_array(.{x, y}),
+            i32_2.from_array(.{vx, vy}),
+        });
+        world.add(.{
+            .position = i32_2.from_array(.{x, y}),
+            .velocity = i32_2.from_array(.{vx, vy}),
+        });
+    }
 
     world.add(.{
         .g = i32_2.from_array(.{0, 10}),

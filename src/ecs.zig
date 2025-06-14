@@ -5,7 +5,7 @@ const StructField = std.builtin.Type.StructField;
 const Component = struct {name: [:0]const u8, type: type};
 const Trait = struct {type: type, components: []const Component};
 
-pub fn BuildWorld(comptime only_system: anytype) type {
+pub fn BuildWorld(comptime only_system: anytype, threaded_argument: ?usize) type {
     const traits = blk: {
         const params = @typeInfo(@TypeOf(only_system)).Fn.params;
         var result: [params.len]Trait = undefined;
@@ -66,10 +66,12 @@ pub fn BuildWorld(comptime only_system: anytype) type {
         // TODO world contains components, systems contain entities
         components: ComponentStorage,
         entities: EntityStorage,
+        allocator: std.mem.Allocator,
 
         const Self = @This();
         pub fn init(allocator: std.mem.Allocator) Self {
             var result: Self = undefined;
+            result.allocator = allocator;
             inline for (0.., traits) |i, trait| {
                 result.entities[i] = std.ArrayList(trait.type).init(allocator);
                 inline for (trait.components) |component| {  // TODO use all_components
@@ -114,18 +116,49 @@ pub fn BuildWorld(comptime only_system: anytype) type {
                 break :blk std.meta.Tuple(&result);
             };
 
-            var to_iterate: TupleOfSlices = undefined;
-            inline for (0..self.entities.len) |i| {
-                to_iterate[i] = self.entities[i].items;
-            }
+            const cpu_n = std.Thread.getCpuCount() catch unreachable;
+            if (threaded_argument != null and self.entities[threaded_argument.?].items.len >= cpu_n) {
+                var threads = self.allocator.alloc(std.Thread, cpu_n) catch unreachable;
+                defer self.allocator.free(threads);
+                
+                for (0..cpu_n) |thread_i| {
+                    var to_iterate: TupleOfSlices = undefined;
+                    inline for (0..self.entities.len) |argument_i| {
+                        if (argument_i == threaded_argument) {
+                            const slice = self.entities[argument_i].items;
+                            to_iterate[argument_i] = slice[
+                                slice.len * thread_i / cpu_n..
+                                slice.len * (thread_i + 1) / cpu_n
+                            ];
+                        } else {
+                            to_iterate[argument_i] = self.entities[argument_i].items;
+                        }
+                    }
 
-            var iterator = toolkit.cartesian(to_iterate);
-            
-            while (iterator.next()) |entry| {
-                @call(.auto, only_system, entry);
+                    threads[thread_i] = std.Thread.spawn(
+                        .{}, update_system, .{only_system, to_iterate}
+                    ) catch unreachable;
+                }
+
+                for (threads) |t| {
+                    t.join();
+                }
+            } else {
+                var to_iterate: TupleOfSlices = undefined;
+                inline for (0..self.entities.len) |i| {
+                    to_iterate[i] = self.entities[i].items;
+                }
+                update_system(only_system, to_iterate);
             }
         }
     };
+}
+
+fn update_system(system: anytype, entity_collections: anytype) void {
+    var iterator = toolkit.cartesian(entity_collections);
+    while (iterator.next()) |entry| {
+        @call(.auto, system, entry);
+    }
 }
 
 fn ListToSlice(comptime List: type) type {
