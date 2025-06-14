@@ -31,18 +31,14 @@ pub fn main() !void {
 
     var world = ecs.BuildWorld(only_system, null).init(allocator);
 
-    for (0..ENTITIES_N) |_| {
+    for (0..ENTITIES_N) |i| {
         const  x = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
         const  y = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
         const vx = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
         const vy = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
-        std.debug.print("{} {}\n", .{
-            i32_2.from_array(.{x, y}),
-            i32_2.from_array(.{vx, vy}),
-        });
         world.add(.{
-            .position = i32_2.from_array(.{x, y}),
-            .velocity = i32_2.from_array(.{vx, vy}),
+            .position = i32_2.from_array(.{i, i}),
+            .velocity = i32_2.from_array(.{i, i}),
         });
     }
 
