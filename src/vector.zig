@@ -6,52 +6,48 @@ const testing = std.testing;
 
 pub fn Vector(comptime ElementType: type, comptime length: usize) type {
     return struct {
-        items: [length]ElementType,
+        items: @Vector(length, ElementType),
 
         const Self = @This();
 
+        /// takes ownership
         pub fn from_array(items: [length]ElementType) Self {
             return Self { .items = items };
         }
 
         pub fn filled_with(value: ElementType) Self {
-            return Self {
-                .items = [_]ElementType{value} ** length,
-            };
+            return Self.from_array([_]ElementType{value} ** length);
         }
 
-        pub fn add_mut(self: *Self, other: Self) void {
-            for (&self.items, other.items) |*a, b| {
-                a.* += b;
-            }
+        pub inline fn add_mut(self: *Self, other: Self) void {
+            self.items += other.items;
         }
 
-        pub fn add(self: Self, other: Self) Self {
+        pub inline fn add(self: Self, other: Self) Self {
             var result = self;
             result.add_mut(other);
             return result;
         }
 
-        pub fn mul_mut(self: *Self, other: ElementType) void {
-            for (&self.items) |*a| {
-                a.* *= other;
-            }
-        }
-
-        pub fn mul(self: Self, other: ElementType) Self {
-            var result = self;
-            result.mul_mut(other);
-            return result;
-        }
-
-        pub fn magnitude(self: Self) f64 {
+        pub inline fn sqr_magnitude(self: Self) ElementType {
             var sum: ElementType = 0;
             for (self.items) |e| {
                 sum += e * e;
             }
-            // TODO handle different combinations of float & int ElementType & Out-type
-            return std.math.sqrt(@as(f64, @floatFromInt(sum)));
+            return sum;
         }
+
+        // pub fn mul_mut(self: *Self, other: ElementType) void {
+        //     for (&self.items) |*a| {
+        //         a.* *= other;
+        //     }
+        // }
+
+        // pub fn mul(self: Self, other: ElementType) Self {
+        //     var result = self;
+        //     result.mul_mut(other);
+        //     return result;
+        // }
 
         pub fn swizzle(self: Self, comptime literal: []const u8) Vector(ElementType, literal.len) {
             const indices = comptime blk: {
@@ -68,10 +64,7 @@ pub fn Vector(comptime ElementType: type, comptime length: usize) type {
                 break :blk result;
             };
 
-            var result = Vector(ElementType, literal.len) {
-                .items = undefined,
-            };
-
+            var result: Vector(ElementType, literal.len) = undefined;
             for (0..literal.len) |i| {
                 result.items[i] = self.items[indices[i]];
             }
