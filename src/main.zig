@@ -41,8 +41,11 @@ pub fn main() !void {
 
     std.debug.print("{} entities, {} ticks\n", .{ENTITIES_N, TICKS});
 
-    inline for ([_]?usize {null, 0}) |threading_i| {
-        var world = ecs.BuildWorld(only_system, threading_i).init(allocator);
+    inline for ([_]ecs.Threading {
+        .none,
+        .{.batch_based = .{.batch_size = 1024, .argument_i = 0}},
+    }) |threading| {
+        var world = ecs.BuildWorld(only_system, threading).init(allocator);
 
         // TODO handle dangling pointers bug
         world.components.position.ensureTotalCapacity(ENTITIES_N) catch unreachable;
@@ -72,7 +75,7 @@ pub fn main() !void {
 
         const end = timer.read();
         std.debug.print("{s}: {d:.2} FPS\n", .{
-            if (threading_i == null) "nothread" else "thread  ",
+            if (threading == .none) "nothread" else "batch   ",
             1e9 * TICKS / @as(f64, @floatFromInt(end - start)),
         });
     }

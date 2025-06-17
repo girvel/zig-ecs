@@ -5,7 +5,15 @@ const StructField = std.builtin.Type.StructField;
 const Component = struct {name: [:0]const u8, type: type};
 const Trait = struct {type: type, components: []const Component};
 
-pub fn BuildWorld(comptime only_system: anytype, threaded_argument: ?usize) type {
+pub const Threading = union(enum) {
+    none,
+    batch_based: struct {
+        argument_i: usize,
+        batch_size: usize,
+    },
+};
+
+pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
     const traits = blk: {
         const params = @typeInfo(@TypeOf(only_system)).Fn.params;
         var result: [params.len]Trait = undefined;
@@ -117,38 +125,49 @@ pub fn BuildWorld(comptime only_system: anytype, threaded_argument: ?usize) type
             };
 
             const cpu_n = std.Thread.getCpuCount() catch unreachable;
-            if (threaded_argument != null and self.entities[threaded_argument.?].items.len >= cpu_n) {
-                var threads = self.allocator.alloc(std.Thread, cpu_n) catch unreachable;
-                defer self.allocator.free(threads);
-                
-                for (0..cpu_n) |thread_i| {
+            switch (threading) {
+                .none => {
                     var to_iterate: TupleOfSlices = undefined;
-                    inline for (0..self.entities.len) |argument_i| {
-                        if (argument_i == threaded_argument) {
-                            const slice = self.entities[argument_i].items;
-                            to_iterate[argument_i] = slice[
-                                slice.len * thread_i / cpu_n..
-                                slice.len * (thread_i + 1) / cpu_n
-                            ];
-                        } else {
-                            to_iterate[argument_i] = self.entities[argument_i].items;
-                        }
+                    inline for (0..self.entities.len) |i| {
+                        to_iterate[i] = self.entities[i].items;
                     }
+                    update_system(only_system, to_iterate);
+                },
 
-                    threads[thread_i] = std.Thread.spawn(
-                        .{}, update_system, .{only_system, to_iterate}
+                .batch_based => |threading_config| {
+                    var pool: std.Thread.Pool = undefined;
+                    pool.init(.{.allocator = self.allocator}) catch unreachable;
+                    defer pool.deinit();
+
+                    const batches_n = std.math.divCeil(
+                        usize,
+                        self.entities[threading_config.argument_i].items.len,
+                        threading_config.batch_size,
                     ) catch unreachable;
-                }
 
-                for (threads) |t| {
-                    t.join();
-                }
-            } else {
-                var to_iterate: TupleOfSlices = undefined;
-                inline for (0..self.entities.len) |i| {
-                    to_iterate[i] = self.entities[i].items;
-                }
-                update_system(only_system, to_iterate);
+                    for (0..batches_n) |batch_i| {
+                        var to_iterate: TupleOfSlices = undefined;
+                        inline for (0..self.entities.len) |argument_i| {
+                            if (argument_i == threading_config.argument_i) {
+                                const slice = self.entities[argument_i].items;
+                                to_iterate[argument_i] = slice[
+                                    threading_config.batch_size * batch_i / cpu_n..
+                                    @min(
+                                        threading_config.batch_size * (batch_i + 1) / cpu_n,
+                                        slice.len - 1,
+                                    )
+                                ];
+                            } else {
+                                to_iterate[argument_i] = self.entities[argument_i].items;
+                            }
+                        }
+
+                        pool.spawn(update_system, .{
+                            only_system,
+                            to_iterate,
+                        }) catch unreachable;
+                    }
+                },
             }
         }
     };
