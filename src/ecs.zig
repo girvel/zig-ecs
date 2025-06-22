@@ -112,8 +112,10 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
                         const new_ptr = component_list.items.ptr;
 
                         if (new_ptr != old_ptr and component_list.items.len > 1) {
+                            const old_ptr_isize: isize = @intCast(@intFromPtr(old_ptr));
+                            const new_ptr_isize: isize = @intCast(@intFromPtr(new_ptr));
                             self.realign_pointers(
-                                component, @intFromPtr(new_ptr) - @intFromPtr(old_ptr)
+                                component, new_ptr_isize - old_ptr_isize
                             );
                         }
 
@@ -125,14 +127,17 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
             }
         }
 
-        fn realign_pointers(self: *Self, comptime dangling_component: Component, delta: usize) void {
+        fn realign_pointers(self: *Self, comptime dangling_component: Component, delta: isize) void {
             inline for (traits, 0..) |trait, i| {
                 inline for (trait.components) |component| {
                     if (std.mem.eql(u8, component.name, dangling_component.name)) {
                         for (self.entities[i].items) |*e| {
-                            @field(e, component.name) = @ptrFromInt(
-                                @intFromPtr(@field(e, component.name)) + delta
-                            );
+                            const old_address: isize = @intCast(@intFromPtr(
+                                @field(e, component.name)
+                            ));
+                            const new_address: isize = old_address + delta;
+                            const new_address_usize: usize = @intCast(new_address);
+                            @field(e, component.name) = @ptrFromInt(new_address_usize);
                         }
                     }
                 }

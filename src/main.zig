@@ -47,10 +47,6 @@ pub fn main() !void {
     }) |threading| {
         var world = ecs.BuildWorld(only_system, threading).init(allocator);
 
-        // TODO handle dangling pointers bug
-        world.components.position.ensureTotalCapacity(ENTITIES_N) catch unreachable;
-        world.components.velocity.ensureTotalCapacity(ENTITIES_N) catch unreachable;
-
         for (0..ENTITIES_N) |_| {
             const  x = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
             const  y = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
