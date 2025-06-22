@@ -105,12 +105,36 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
                 } else {
                     var subject: trait.type = undefined;
                     inline for (trait.components) |component| {
-                        @field(self.components, component.name)
-                            .append(@field(entity, component.name)) catch unreachable;
+                        var component_list: *std.ArrayList(component.type)
+                            = &@field(self.components, component.name);
+                        const old_ptr = component_list.items.ptr;
+                        component_list.append(@field(entity, component.name)) catch unreachable;
+                        const new_ptr = component_list.items.ptr;
+
+                        if (new_ptr != old_ptr and component_list.items.len > 1) {
+                            self.realign_pointers(
+                                component, @intFromPtr(new_ptr) - @intFromPtr(old_ptr)
+                            );
+                        }
+
                         const items = @field(self.components, component.name).items;
                         @field(subject, component.name) = &items[items.len - 1];
                     }
                     self.entities[i].append(subject) catch unreachable;
+                }
+            }
+        }
+
+        fn realign_pointers(self: *Self, comptime dangling_component: Component, delta: usize) void {
+            inline for (traits, 0..) |trait, i| {
+                inline for (trait.components) |component| {
+                    if (std.mem.eql(u8, component.name, dangling_component.name)) {
+                        for (self.entities[i].items) |*e| {
+                            @field(e, component.name) = @ptrFromInt(
+                                @intFromPtr(@field(e, component.name)) + delta
+                            );
+                        }
+                    }
                 }
             }
         }
