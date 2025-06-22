@@ -2,6 +2,7 @@ const std = @import("std");
 const vector = @import("vector.zig");
 const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
+const rand = std.crypto.random;
 
 // TODO managing stuff like strings?
 // TODO const references in traits?
@@ -23,7 +24,7 @@ fn only_system(entity: Inert, constants: Constants) void {
     var p = entity.position;
     var v = entity.velocity;
 
-    inline for (0..100) |_| {
+    for (0..100) |_| {
         v.add_mut(if (p.items[1] > 0) down_ish else up_ish);
     }
 
@@ -52,10 +53,10 @@ pub fn main() !void {
         world.components.velocity.ensureTotalCapacity(ENTITIES_N) catch unreachable;
 
         for (0..ENTITIES_N) |_| {
-            const  x = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
-            const  y = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
-            const vx = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
-            const vy = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
+            const  x = rand.intRangeAtMost(i32, -1000, 1000);
+            const  y = rand.intRangeAtMost(i32, -1000, 1000);
+            const vx = rand.intRangeAtMost(i32, -1000, 1000);
+            const vy = rand.intRangeAtMost(i32, -1000, 1000);
             world.add(.{
                 .position = i32_2.from_array(.{x, y}),
                 .velocity = i32_2.from_array(.{vx, vy}),

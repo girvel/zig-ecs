@@ -2,8 +2,27 @@ const std = @import("std");
 const toolkit = @import("toolkit.zig");
 const StructField = std.builtin.Type.StructField;
 
-const Component = struct {name: [:0]const u8, type: type};
-const Trait = struct {type: type, components: []const Component};
+// TERMS:
+// Trait is a type of a system argument
+// Component is a field of the trait
+//
+// fn system_function(arg1 Trait1, arg2 Trait2, ...) void {}
+// const Trait1 = struct {
+//     component1: *Component1,
+//     component2: *Component2,
+//     ...
+//  };
+
+const Component = struct {
+    name: [:0]const u8, 
+    type: type,
+};
+
+const Trait = struct {
+    storage_type: type,
+    out_type: type,
+    components: []const Component,
+};
 
 pub const Threading = union(enum) {
     none,
@@ -17,8 +36,21 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
     const traits = blk: {
         const params = @typeInfo(@TypeOf(only_system)).Fn.params;
         var result: [params.len]Trait = undefined;
+
         for (&result, params) |*trait, param| {
-            trait.type = param.type orelse unreachable;
+            trait.out_type = param.type orelse unreachable;
+            trait.storage_type = st: {
+                const source_fields = @typeInfo(trait.out_type).Struct.fields;
+                comptime var ibe: [source_fields.len]toolkit.Field = undefined;
+                for (&ibe, source_fields) |*field, source| {
+                    field.* = .{
+                        .name = source.name,
+                        .type = usize,
+                    };
+                }
+                break :st ibe;
+            };
+
             const components = components: {
                 const argument_fields = @typeInfo(trait.type).Struct.fields;
                 var components: [argument_fields.len]Component = undefined;
@@ -63,7 +95,7 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
     const es_types = blk: {
         comptime var result: [traits.len]type = undefined;
         for (&result, traits) |*r, t| {
-            r.* = std.ArrayList(t.type);
+            r.* = std.ArrayList(t.storage_type);
         }
         break :blk result;
     };
@@ -81,7 +113,7 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
             var result: Self = undefined;
             result.allocator = allocator;
             inline for (0.., traits) |i, trait| {
-                result.entities[i] = std.ArrayList(trait.type).init(allocator);
+                result.entities[i] = std.ArrayList(trait.storage_type).init(allocator);
                 inline for (trait.components) |component| {  // TODO use all_components
                     @field(result.components, component.name)
                         = std.ArrayList(component.type).init(allocator);
@@ -103,12 +135,12 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
                         );
                     }
                 } else {
-                    var subject: trait.type = undefined;
+                    var subject: trait.storage_type = undefined;
                     inline for (trait.components) |component| {
                         @field(self.components, component.name)
                             .append(@field(entity, component.name)) catch unreachable;
                         const items = @field(self.components, component.name).items;
-                        @field(subject, component.name) = &items[items.len - 1];
+                        @field(subject, component.name) = items.len - 1;
                     }
                     self.entities[i].append(subject) catch unreachable;
                 }
@@ -131,7 +163,7 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
                     inline for (0..self.entities.len) |i| {
                         to_iterate[i] = self.entities[i].items;
                     }
-                    update_system(only_system, to_iterate);
+                    Self.update_system(only_system, to_iterate);
                 },
 
                 .batch_based => |threading_config| {
@@ -162,7 +194,7 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
                             }
                         }
 
-                        pool.spawn(update_system, .{
+                        pool.spawn(Self.update_system, .{
                             only_system,
                             to_iterate,
                         }) catch unreachable;
@@ -170,14 +202,32 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
                 },
             }
         }
-    };
-}
 
-fn update_system(system: anytype, entity_collections: anytype) void {
-    var iterator = toolkit.cartesian(entity_collections);
-    while (iterator.next()) |entry| {
-        @call(.auto, system, entry);
-    }
+        fn update_system(system: anytype, entity_collections: anytype) void {
+            var iterator = toolkit.cartesian(entity_collections);
+            while (iterator.next()) |entry| {
+                const args_types = Args: {
+                    comptime var fields: [traits.len]type = undefined;
+                    for (&fields, traits) |*field, trait| {
+                        field.* = trait.out_type;
+                    }
+                    break :Args fields;
+                };
+
+                const args = args: {
+                    comptime var args: std.meta.Tuple(args_types) = undefined;
+                    inline for (traits, 0..) |trait, i| {
+                        comptime var arg: args_types[i] = undefined;
+                        inline for (trait.)
+                        args[i] = arg;  // TODO shorten
+                    }
+                    break :args args;
+                };
+
+                @call(.auto, system, args);
+            }
+        }
+    };
 }
 
 fn ListToSlice(comptime List: type) type {

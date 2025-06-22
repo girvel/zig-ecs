@@ -9,6 +9,9 @@ ECS implementation allowing for multithreaded systems. *Potential expansion:* sy
 - [ ] Mono-world -> multi-world
   - [x] Multiple components required
   - [x] Multiple arguments in a system
+  - [ ] Dangling pointers bug
   - [ ] System as a separate entity
+  - [ ] Entity schema
+  - [ ] Entity destructor
   - [ ] System-level threading
   - [ ] Multiple systems in a world
