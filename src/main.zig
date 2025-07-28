@@ -6,8 +6,8 @@ const ecs = @import("ecs.zig");
 
 // TODO sprite or text
 const Drawable = struct {
-    position: *i32_2,
-    sprite: *rl.Texture2D,
+    position: *const i32_2,
+    sprite: *const rl.Texture2D,
 };
 
 fn draw(target: Drawable) void {
@@ -17,7 +17,7 @@ fn draw(target: Drawable) void {
 
 const PlayerFlag = struct {};
 const Controllable = struct {
-    player_flag: *PlayerFlag,
+    player_flag: *const PlayerFlag,
     position: *i32_2,
 };
 

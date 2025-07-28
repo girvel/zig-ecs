@@ -6,7 +6,6 @@ const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
 
 // TODO managing stuff like strings?
-// TODO const references in traits?
 
 
 const Inert = struct {
