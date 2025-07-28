@@ -16,5 +16,8 @@
 
 ## Game progress:
 
-- [ ] Draw both sprites & text
 - [x] Control the player character
+- [ ] Express everything in systems
+- [ ] Add entities to the game
+- [ ] Remove entities from the game
+- [ ] Draw both sprites & text

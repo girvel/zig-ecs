@@ -132,7 +132,7 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
             }
         }
 
-        fn realign_pointers(
+        fn shift_pointers(
             self: *Self, comptime dangling_component: [:0]const u8, delta: isize
         ) void {
             inline for (traits, 0..) |trait, i| {
@@ -155,24 +155,57 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
 }
 
 pub fn World(comptime systems: []const type) type {
-    const ComponentStorage = comptime blk: {
-        var result: []const toolkit.Field = &.{};
+    const ComponentStorage, const all_components = comptime blk: {
+        var storage_fields: []const toolkit.Field = &.{};
+        var all_components: []const Component = &.{};
         for (systems) |system| {
             for (system.traits) |trait| {
                 for (trait.components) |component| {
-                    for (result) |field| {
+                    for (storage_fields) |field| {
                         if (std.mem.eql(u8, field.name, component.name)) break;
                     } else {
-                        result = result ++ .{toolkit.Field{
+                        storage_fields = storage_fields ++ .{toolkit.Field{
                             .name = component.name,
                             .type = std.ArrayList(component.type),
+                        }};
+
+                        all_components = all_components ++ .{Component{
+                            .name = component.name,
+                            .type = component.type,
                         }};
                     }
                 }
             }
         }
-        break :blk toolkit.Struct(@constCast(result));
+
+        break :blk .{
+            toolkit.Struct(@constCast(storage_fields)),
+            all_components
+        };
     };
+
+    // const Entity = comptime blk: {
+    //     var result: []const toolkit.Field = &.{};
+    //     for (all_components) |component| {
+    //         result = result ++ .{toolkit.Field{
+    //             .name = component.name,
+    //             .type = ?*component.type,
+    //         }};
+    //     }
+    //     break :blk toolkit.Struct(@constCast(result));
+    // };
+
+    // const Genesis = struct {
+    //     creation_queue: std.ArrayList(Entity),
+    // };
+
+    // const GenesisSystem = (struct {
+    //     fn genesis_fn(genesis: Genesis) void {
+    //         for (genesis.creation_queue.items) |e| {
+    //             
+    //         }
+    //     }
+    // }{}).genesis_fn;
 
     return struct {
         components: ComponentStorage,
@@ -193,19 +226,18 @@ pub fn World(comptime systems: []const type) type {
         pub fn add(self: *Self, entity: anytype) void {
             const t = @TypeOf(entity);
 
-            inline for (@typeInfo(ComponentStorage).@"struct".fields) |component_field| {
-                const base_type = @typeInfo(component_field.type.Slice).@"pointer".child;
-                if (!@hasField(t, component_field.name)) continue;
+            inline for (all_components) |component| {
+                if (!@hasField(t, component.name)) continue;
 
-                const component_value = @field(entity, component_field.name);
-                if (@TypeOf(component_value) != base_type) {
+                const component_value = @field(entity, component.name);
+                if (@TypeOf(component_value) != component.type) {
                     @compileError(
-                        "entity's ." ++ component_field.name ++
-                        " should be of type " ++ @typeName(base_type)
+                        "entity's ." ++ component.name ++
+                        " should be of type " ++ @typeName(component.type)
                     );
                 }
 
-                var component_list = &@field(self.components, component_field.name);
+                var component_list = &@field(self.components, component.name);
                 const old_ptr = component_list.items.ptr;
                 component_list.append(component_value) catch unreachable;
                 const new_ptr = component_list.items.ptr;
@@ -214,8 +246,8 @@ pub fn World(comptime systems: []const type) type {
                     const old_ptr_isize: isize = @intCast(@intFromPtr(old_ptr));
                     const new_ptr_isize: isize = @intCast(@intFromPtr(new_ptr));
                     inline for (&self.systems) |*system| {
-                        system.realign_pointers(
-                            component_field.name, new_ptr_isize - old_ptr_isize
+                        system.shift_pointers(
+                            component.name, new_ptr_isize - old_ptr_isize
                         );
                     }
                 }

@@ -4,6 +4,11 @@ const vector = @import("vector.zig");
 const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
 
+fn begin_drawing() void {
+    rl.beginDrawing();
+    rl.clearBackground(.white);
+}
+
 // TODO sprite or text
 const Drawable = struct {
     position: *const i32_2,
@@ -13,6 +18,10 @@ const Drawable = struct {
 fn draw(target: Drawable) void {
     const pos = target.position.*.items;
     rl.drawTexture(target.sprite.*, pos[0], pos[1], .white);
+}
+
+fn end_drawing() void {
+    rl.endDrawing();
 }
 
 const PlayerFlag = struct {};
@@ -46,7 +55,9 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     var world = ecs.World(&.{
+        ecs.System(begin_drawing, .none),
         ecs.System(draw, .none),
+        ecs.System(end_drawing, .none),
         ecs.System(control, .none),
     }).init(allocator);
 
@@ -65,10 +76,6 @@ pub fn main() !void {
     });
 
     while (!rl.windowShouldClose()) {
-        rl.beginDrawing();
-        defer rl.endDrawing();
-
-        rl.clearBackground(.white);
         world.update();
     }
 }
