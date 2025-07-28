@@ -11,10 +11,10 @@
 - [ ] Finalizing
   - [ ] Managing freeable shit s.a. strings
   - [ ] Handling errors
-  - [ ] Two systems requiring the same component
+  - [x] Two systems requiring the same component
   - [ ] Compile error if trait types contain non-pointer fields
 
 ## Game progress:
 
 - [ ] Draw both sprites & text
-- [ ] Control the player character
+- [x] Control the player character

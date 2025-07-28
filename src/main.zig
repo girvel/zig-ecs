@@ -15,14 +15,30 @@ fn draw(target: Drawable) void {
     rl.drawTexture(target.sprite.*, pos[0], pos[1], .white);
 }
 
-fn control() void {
-    if (rl.isKeyPressed(.w)) {
-        std.debug.print("forward!\n", .{});
+const PlayerFlag = struct {};
+const Controllable = struct {
+    player_flag: *PlayerFlag,
+    position: *i32_2,
+};
+
+const keymap = [_]std.meta.Tuple(&.{rl.KeyboardKey, i32_2}){
+    .{.w, i32_2.from(.{0, -16})},
+    .{.a, i32_2.from(.{-16, 0})},
+    .{.s, i32_2.from(.{0, 16})},
+    .{.d, i32_2.from(.{16, 0})},
+};
+
+fn control(target: Controllable) void {
+    for (keymap) |mapping| {
+        const key, const offset = mapping;
+        if (rl.isKeyPressed(key)) {
+            target.position.add_mut(offset);
+        }
     }
 }
 
 pub fn main() !void {
-    const window_size = i32_2.from_array(.{100, 100});
+    const window_size = i32_2.from(.{640, 480});
     rl.initWindow(window_size.items[0], window_size.items[1], "Zig ECS test");
     defer rl.closeWindow();
 
@@ -38,13 +54,14 @@ pub fn main() !void {
     const moose_dude = try rl.loadTexture("assets/moose_dude.png");
 
     world.add(.{
-        .position = i32_2.from_array(.{0, 0}),
+        .position = i32_2.from(.{0, 0}),
         .sprite = moose_dude,
     });
 
     world.add(.{
-        .position = i32_2.from_array(.{16, 0}),
+        .position = i32_2.from(.{16, 0}),
         .sprite = mannequin,
+        .player_flag = PlayerFlag{},
     });
 
     while (!rl.windowShouldClose()) {

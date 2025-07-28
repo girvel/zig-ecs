@@ -11,12 +11,12 @@ pub fn Vector(comptime ElementType: type, comptime length: usize) type {
         const Self = @This();
 
         /// takes ownership
-        pub fn from_array(items: [length]ElementType) Self {
+        pub fn from(items: [length]ElementType) Self {
             return Self { .items = items };
         }
 
         pub fn filled_with(value: ElementType) Self {
-            return Self.from_array([_]ElementType{value} ** length);
+            return Self.from([_]ElementType{value} ** length);
         }
 
         pub inline fn add_mut(self: *Self, other: Self) void {
@@ -92,7 +92,7 @@ pub fn Vector(comptime ElementType: type, comptime length: usize) type {
 }
 
 test "initialization" {
-    const v = Vector(i32, 3).from_array([_]i32{1, 2, 3});
+    const v = Vector(i32, 3).from([_]i32{1, 2, 3});
 
     try testing.expect(v.items[0] == 1);
     try testing.expect(v.items[1] == 2);
@@ -140,7 +140,7 @@ test "addition (without mutation)" {
 }
 
 test "swizzling" {
-    const v = Vector(i32, 3).from_array([_]i32{1, 2, 3});
+    const v = Vector(i32, 3).from([_]i32{1, 2, 3});
     const u = v.swizzle("zxy");
     try testing.expect(u.items[0] == 3);
     try testing.expect(u.items[1] == 1);

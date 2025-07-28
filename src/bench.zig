@@ -18,8 +18,8 @@ const Constants = struct {
     g: *i32_2,
 };
 
-const up_ish = i32_2.from_array(.{12, -44});
-const down_ish = i32_2.from_array(.{-44, 89});
+const up_ish = i32_2.from(.{12, -44});
+const down_ish = i32_2.from(.{-44, 89});
 
 fn only_system(entity: Inert, constants: Constants) void {
     var p = entity.position;
@@ -55,13 +55,13 @@ pub fn main() !void {
             const vx = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
             const vy = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
             world.add(.{
-                .position = i32_2.from_array(.{x, y}),
-                .velocity = i32_2.from_array(.{vx, vy}),
+                .position = i32_2.from(.{x, y}),
+                .velocity = i32_2.from(.{vx, vy}),
             });
         }
 
         world.add(.{
-            .g = i32_2.from_array(.{0, 10}),
+            .g = i32_2.from(.{0, 10}),
         });
 
         var timer = std.time.Timer.start() catch unreachable;
