@@ -2,14 +2,14 @@ const std = @import("std");
 const StructField = std.builtin.Type.StructField;
 
 fn Cartesian(comptime slice_types: type) type {
-    const slice_tuple_fields = @typeInfo(slice_types).Struct.fields;
+    const slice_tuple_fields = @typeInfo(slice_types).@"struct".fields;
     const len = slice_tuple_fields.len;
     const IteratorReturn = blk: {
         var fs: [len]type = undefined;
         for (&fs, slice_tuple_fields) |*f, field| {
-            f.* = @typeInfo(field.type).Pointer.child;
+            f.* = @typeInfo(field.type).pointer.child;
             switch (@typeInfo(f.*)) {
-                .Array => |Array| {
+                .array => |Array| {
                     f.* = Array.child;
                 },
                 else => {},
@@ -83,14 +83,14 @@ pub fn Struct(fields: []Field) type {
                 .name = f.name,
                 .type = f.type,
                 .alignment = @alignOf(f.type),
-                .default_value = null,
+                .default_value_ptr = null,
                 .is_comptime = false,
             };
         }
         break :blk result;
     };
 
-    return @Type(.{ .Struct = .{
+    return @Type(.{ .@"struct" = .{
         .layout = .auto,
         .fields = &result_fields,
         .decls = &.{},

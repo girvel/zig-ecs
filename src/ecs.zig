@@ -15,17 +15,17 @@ pub const Threading = union(enum) {
 
 pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
     const traits = blk: {
-        const params = @typeInfo(@TypeOf(only_system)).Fn.params;
+        const params = @typeInfo(@TypeOf(only_system)).@"fn".params;
         var result: [params.len]Trait = undefined;
         for (&result, params) |*trait, param| {
             trait.type = param.type orelse unreachable;
             const components = components: {
-                const argument_fields = @typeInfo(trait.type).Struct.fields;
+                const argument_fields = @typeInfo(trait.type).@"struct".fields;
                 var components: [argument_fields.len]Component = undefined;
                 for (&components, argument_fields) |*component, field| {
                     component.* = .{
                         .name = field.name,
-                        .type = @typeInfo(field.type).Pointer.child,
+                        .type = @typeInfo(field.type).pointer.child,
                         // TODO compile error if not a pointer
                     };
                 }
@@ -210,7 +210,7 @@ fn update_system(system: anytype, entity_collections: anytype) void {
 }
 
 fn ListToSlice(comptime List: type) type {
-    return for (@typeInfo(List).Struct.fields) |f| {
+    return for (@typeInfo(List).@"struct".fields) |f| {
         if (std.mem.eql(u8, f.name, "items")) break f.type;
     } else unreachable;
 }
