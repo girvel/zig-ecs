@@ -9,7 +9,7 @@
   - [x] System as a separate entity
   - [x] Multiple systems in a world
 - [ ] Finalizing
-  - [ ] Managing shit s.a. strings
+  - [ ] Managing freeable shit s.a. strings
   - [ ] Handling errors
   - [ ] Two systems requiring the same component
   - [ ] Compile error if trait types contain non-pointer fields
@@ -17,3 +17,4 @@
 ## Game progress:
 
 - [ ] Draw both sprites & text
+- [ ] Control the player character

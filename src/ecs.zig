@@ -156,35 +156,25 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
 
 pub fn World(comptime systems: []const type) type {
     const ComponentStorage = comptime blk: {
-        var size = 0;
-        for (systems) |system| {
-            for (system.traits) |trait| {
-                for (trait.components) |_| {
-                    size += 1;
-                }
-            }
-        }
-
-        var result: [size]toolkit.Field = undefined;
-        var i = 0;
-        
+        var result: []const toolkit.Field = &.{};
         for (systems) |system| {
             for (system.traits) |trait| {
                 for (trait.components) |component| {
-                    result[i] = .{  // TODO check for collisions
-                        .name = component.name,
-                        .type = std.ArrayList(component.type),
-                    };
-                    i += 1;
+                    for (result) |field| {
+                        if (std.mem.eql(u8, field.name, component.name)) break;
+                    } else {
+                        result = result ++ .{toolkit.Field{
+                            .name = component.name,
+                            .type = std.ArrayList(component.type),
+                        }};
+                    }
                 }
             }
         }
-
-        break :blk toolkit.Struct(&result);
+        break :blk toolkit.Struct(@constCast(result));
     };
 
     return struct {
-        // TODO world contains components, systems contain entities
         components: ComponentStorage,
         systems: std.meta.Tuple(systems),
 
