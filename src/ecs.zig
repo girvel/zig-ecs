@@ -13,9 +13,9 @@ pub const Threading = union(enum) {
     },
 };
 
-pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
-    const traits = blk: {
-        const params = @typeInfo(@TypeOf(only_system)).@"fn".params;
+pub fn System(comptime system_fn: anytype, threading: Threading) type {
+    const traits_ = blk: {
+        const params = @typeInfo(@TypeOf(system_fn)).@"fn".params;
         var result: [params.len]Trait = undefined;
         for (&result, params) |*trait, param| {
             trait.type = param.type orelse unreachable;
@@ -36,33 +36,9 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
         break :blk result;
     };
 
-    const ComponentStorage = blk: {
-        comptime var size = 0;
-        for (traits) |trait| {
-            for (trait.components) |_| {
-                size += 1;
-            }
-        }
-
-        var result: [size]toolkit.Field = undefined;
-        var i = 0;
-        
-        for (traits) |trait| {
-            for (trait.components) |component| {
-                result[i] = .{  // TODO check for collisions
-                    .name = component.name,
-                    .type = std.ArrayList(component.type),
-                };
-                i += 1;
-            }
-        }
-
-        break :blk toolkit.Struct(&result);
-    };
-
     const es_types = blk: {
-        comptime var result: [traits.len]type = undefined;
-        for (&result, traits) |*r, t| {
+        comptime var result: [traits_.len]type = undefined;
+        for (&result, traits_) |*r, t| {
             r.* = std.ArrayList(t.type);
         }
         break :blk result;
@@ -71,75 +47,31 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
     const EntityStorage = std.meta.Tuple(&es_types);
 
     return struct {
-        // TODO world contains components, systems contain entities
-        components: ComponentStorage,
         entities: EntityStorage,
         allocator: std.mem.Allocator,
-
+        const traits = traits_;
         const Self = @This();
-        pub fn init(allocator: std.mem.Allocator) Self {
+
+        fn init(allocator: std.mem.Allocator) Self {
             var result: Self = undefined;
             result.allocator = allocator;
             inline for (0.., traits) |i, trait| {
                 result.entities[i] = std.ArrayList(trait.type).init(allocator);
-                inline for (trait.components) |component| {  // TODO use all_components
-                    @field(result.components, component.name)
-                        = std.ArrayList(component.type).init(allocator);
-                }
             }
             return result;
         }
 
-        pub fn add(self: *Self, entity: anytype) void {
-            const t = @TypeOf(entity);
-
+        fn add(self: *Self, entity: anytype, component_storage: anytype) void {
             inline for (0.., traits) |i, trait| {
                 inline for (trait.components) |component| {
-                    if (!@hasField(t, component.name)) break;
-                    if (@TypeOf(@field(entity, component.name)) != component.type) {
-                        @compileError(
-                            "entity's ." ++ component.name ++
-                            " should be of type " ++ @typeName(component.type)
-                        );
-                    }
+                    if (!@hasField(@TypeOf(entity), component.name)) break;
                 } else {
                     var subject: trait.type = undefined;
                     inline for (trait.components) |component| {
-                        var component_list: *std.ArrayList(component.type)
-                            = &@field(self.components, component.name);
-                        const old_ptr = component_list.items.ptr;
-                        component_list.append(@field(entity, component.name)) catch unreachable;
-                        const new_ptr = component_list.items.ptr;
-
-                        if (new_ptr != old_ptr and component_list.items.len > 1) {
-                            const old_ptr_isize: isize = @intCast(@intFromPtr(old_ptr));
-                            const new_ptr_isize: isize = @intCast(@intFromPtr(new_ptr));
-                            self.realign_pointers(
-                                component, new_ptr_isize - old_ptr_isize
-                            );
-                        }
-
-                        const items = @field(self.components, component.name).items;
+                        const items = @field(component_storage, component.name).items;
                         @field(subject, component.name) = &items[items.len - 1];
                     }
                     self.entities[i].append(subject) catch unreachable;
-                }
-            }
-        }
-
-        fn realign_pointers(self: *Self, comptime dangling_component: Component, delta: isize) void {
-            inline for (traits, 0..) |trait, i| {
-                inline for (trait.components) |component| {
-                    if (std.mem.eql(u8, component.name, dangling_component.name)) {
-                        for (self.entities[i].items) |*e| {
-                            const old_address: isize = @intCast(@intFromPtr(
-                                @field(e, component.name)
-                            ));
-                            const new_address: isize = old_address + delta;
-                            const new_address_usize: usize = @intCast(new_address);
-                            @field(e, component.name) = @ptrFromInt(new_address_usize);
-                        }
-                    }
                 }
             }
         }
@@ -148,7 +80,7 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
             const TupleOfSlices = comptime blk: {
                 var result: [es_types.len]type = undefined;
                 for (&result, es_types) |*r, s| {
-                    r.* = ListToSlice(s);
+                    r.* = s.Slice;
                 }
                 break :blk std.meta.Tuple(&result);
             };
@@ -160,7 +92,7 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
                     inline for (0..self.entities.len) |i| {
                         to_iterate[i] = self.entities[i].items;
                     }
-                    update_system(only_system, to_iterate);
+                    update_system(system_fn, to_iterate);
                 },
 
                 .batch_based => |threading_config| {
@@ -192,11 +124,121 @@ pub fn BuildWorld(comptime only_system: anytype, threading: Threading) type {
                         }
 
                         pool.spawn(update_system, .{
-                            only_system,
+                            system_fn,
                             to_iterate,
                         }) catch unreachable;
                     }
                 },
+            }
+        }
+
+        fn realign_pointers(
+            self: *Self, comptime dangling_component: [:0]const u8, delta: isize
+        ) void {
+            inline for (traits, 0..) |trait, i| {
+                inline for (trait.components) |component| {
+                    if (std.mem.eql(u8, component.name, dangling_component)) {
+                        for (self.entities[i].items) |*e| {
+                            const old_address: isize = @intCast(@intFromPtr(
+                                @field(e, component.name)
+                            ));
+                            const new_address: isize = old_address + delta;
+                            const new_address_usize: usize = @intCast(new_address);
+                            @field(e, component.name) = @ptrFromInt(new_address_usize);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    };
+}
+
+pub fn World(comptime systems: []const type) type {
+    const ComponentStorage = comptime blk: {
+        var size = 0;
+        for (systems) |system| {
+            for (system.traits) |trait| {
+                for (trait.components) |_| {
+                    size += 1;
+                }
+            }
+        }
+
+        var result: [size]toolkit.Field = undefined;
+        var i = 0;
+        
+        for (systems) |system| {
+            for (system.traits) |trait| {
+                for (trait.components) |component| {
+                    result[i] = .{  // TODO check for collisions
+                        .name = component.name,
+                        .type = std.ArrayList(component.type),
+                    };
+                    i += 1;
+                }
+            }
+        }
+
+        break :blk toolkit.Struct(&result);
+    };
+
+    return struct {
+        // TODO world contains components, systems contain entities
+        components: ComponentStorage,
+        systems: std.meta.Tuple(systems),
+
+        const Self = @This();
+        pub fn init(allocator: std.mem.Allocator) Self {
+            var result: Self = undefined;
+            inline for (@typeInfo(ComponentStorage).@"struct".fields) |field| {
+                @field(result.components, field.name) = field.type.init(allocator);
+            }
+            inline for (0.., systems) |i, system| {
+                result.systems[i] = system.init(allocator);
+            }
+            return result;
+        }
+
+        pub fn add(self: *Self, entity: anytype) void {
+            const t = @TypeOf(entity);
+
+            inline for (@typeInfo(ComponentStorage).@"struct".fields) |component_field| {
+                const base_type = @typeInfo(component_field.type.Slice).@"pointer".child;
+                if (!@hasField(t, component_field.name)) continue;
+
+                const component_value = @field(entity, component_field.name);
+                if (@TypeOf(component_value) != base_type) {
+                    @compileError(
+                        "entity's ." ++ component_field.name ++
+                        " should be of type " ++ @typeName(base_type)
+                    );
+                }
+
+                var component_list = &@field(self.components, component_field.name);
+                const old_ptr = component_list.items.ptr;
+                component_list.append(component_value) catch unreachable;
+                const new_ptr = component_list.items.ptr;
+
+                if (new_ptr != old_ptr and component_list.items.len > 1) {
+                    const old_ptr_isize: isize = @intCast(@intFromPtr(old_ptr));
+                    const new_ptr_isize: isize = @intCast(@intFromPtr(new_ptr));
+                    inline for (&self.systems) |*system| {
+                        system.realign_pointers(
+                            component_field.name, new_ptr_isize - old_ptr_isize
+                        );
+                    }
+                }
+            }
+
+            inline for (&self.systems) |*system| {
+                system.add(entity, self.components);
+            }
+        }
+
+        pub fn update(self: *Self) void {
+            inline for (&self.systems) |*system| {
+                system.update();
             }
         }
     };
@@ -207,10 +249,4 @@ fn update_system(system: anytype, entity_collections: anytype) void {
     while (iterator.next()) |entry| {
         @call(.auto, system, entry);
     }
-}
-
-fn ListToSlice(comptime List: type) type {
-    return for (@typeInfo(List).@"struct".fields) |f| {
-        if (std.mem.eql(u8, f.name, "items")) break f.type;
-    } else unreachable;
 }

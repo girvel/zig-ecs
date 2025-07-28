@@ -47,7 +47,7 @@ pub fn main() !void {
         .none,
         .{.batch_based = .{.batch_size = 1024, .argument_i = 0}},
     }) |threading| {
-        var world = ecs.BuildWorld(only_system, threading).init(allocator);
+        var world = ecs.World(only_system, threading).init(allocator);
 
         for (0..ENTITIES_N) |_| {
             const  x = std.crypto.random.intRangeAtMost(i32, -1000, 1000);
