@@ -61,6 +61,11 @@ pub fn main() !void {
         ecs.System(control, .none),
     }).init(allocator);
 
+    world.add(ecs.Avatar {
+        ._add = @TypeOf(world)._add,
+        ._world = &world,
+    });
+
     const mannequin = try rl.loadTexture("assets/mannequin.png");
     const moose_dude = try rl.loadTexture("assets/moose_dude.png");
 
