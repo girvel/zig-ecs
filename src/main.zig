@@ -4,6 +4,16 @@ const vector = @import("vector.zig");
 const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
 
+const World = ecs.World(&.{
+    ecs.System(begin_drawing, .none),
+    ecs.System(draw, .none),
+    ecs.System(end_drawing, .none),
+    ecs.System(control, .none),
+    ecs.System(test_creation, .none)
+});
+
+var world: World = undefined;
+
 fn begin_drawing() void {
     rl.beginDrawing();
     rl.clearBackground(.white);
@@ -46,6 +56,15 @@ fn control(target: Controllable) void {
     }
 }
 
+fn test_creation() void {
+    if (rl.isKeyPressed(.f)) {
+        world.add(.{
+            .position = i32_2.from(.{128, 256}),
+            .sprite = rl.loadTexture("assets/mannequin.png") catch unreachable,
+        });
+    }
+}
+
 pub fn main() !void {
     const window_size = i32_2.from(.{640, 480});
     rl.initWindow(window_size.items[0], window_size.items[1], "Zig ECS test");
@@ -54,17 +73,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var world = ecs.World(&.{
-        ecs.System(begin_drawing, .none),
-        ecs.System(draw, .none),
-        ecs.System(end_drawing, .none),
-        ecs.System(control, .none),
-    }).init(allocator);
-
-    world.add(ecs.Avatar {
-        ._add = @TypeOf(world)._add,
-        ._world = &world,
-    });
+    world = World.init(allocator);
 
     const mannequin = try rl.loadTexture("assets/mannequin.png");
     const moose_dude = try rl.loadTexture("assets/moose_dude.png");

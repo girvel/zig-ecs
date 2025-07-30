@@ -154,15 +154,6 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
     };
 }
 
-pub const Avatar = struct {
-    _world: *anyopaque,
-    _add: *const fn (*anyopaque, anytype) void,
-    const Self = @This();
-    pub fn add(self: Self, entity: anytype) void {
-        self._add(self._world, entity);
-    }
-};
-
 pub fn World(comptime systems: []const type) type {
     const ComponentStorage, const all_components = comptime blk: {
         var storage_fields: []const toolkit.Field = &.{};
