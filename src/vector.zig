@@ -80,10 +80,10 @@ pub fn Vector(comptime ElementType: type, comptime length: usize) type {
             _ = fmt;
             _ = options;
             try writer.print("(", .{});
-            inline for (0.., self.items) |i, item| {
+            inline for (0..length) |i| {
                 try writer.print(
                     (if (i > 0) ", " else "") ++ "{}",
-                    .{item},
+                    .{self.items[i]},
                 );
             }
             try writer.print(")", .{});

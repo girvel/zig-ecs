@@ -48,6 +48,7 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
 
     return struct {
         entities: EntityStorage,
+        active_lengths: [traits.len]usize,
         allocator: std.mem.Allocator,
         const traits = traits_;
         const Self = @This();
@@ -57,6 +58,7 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
             result.allocator = allocator;
             inline for (0.., traits) |i, trait| {
                 result.entities[i] = std.ArrayList(trait.type).init(allocator);
+                result.active_lengths[i] = 0;
             }
             return result;
         }
@@ -92,7 +94,7 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
                     inline for (0..self.entities.len) |i| {
                         to_iterate[i] = self.entities[i].items;
                     }
-                    update_system(system_fn, to_iterate);
+                    update_system(system_fn, to_iterate, self.active_lengths);
                 },
 
                 .batch_based => |threading_config| {
@@ -108,6 +110,7 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
 
                     for (0..batches_n) |batch_i| {
                         var to_iterate: TupleOfSlices = undefined;
+                        var active_lengths = self.active_lengths;
                         inline for (0..self.entities.len) |argument_i| {
                             if (argument_i == threading_config.argument_i) {
                                 const slice = self.entities[argument_i].items;
@@ -115,9 +118,10 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
                                     threading_config.batch_size * batch_i / cpu_n..
                                     @min(
                                         threading_config.batch_size * (batch_i + 1) / cpu_n,
-                                        slice.len - 1,
+                                        self.active_lengths[argument_i] - 1,
                                     )
                                 ];
+                                active_lengths[argument_i] = to_iterate[argument_i].len;
                             } else {
                                 to_iterate[argument_i] = self.entities[argument_i].items;
                             }
@@ -126,29 +130,51 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
                         pool.spawn(update_system, .{
                             system_fn,
                             to_iterate,
+                            active_lengths,
                         }) catch unreachable;
                     }
                 },
+            }
+
+            inline for (&self.active_lengths, self.entities) |*len, list| {
+                len.* = list.items.len;
             }
         }
 
         fn shift_pointers(
             self: *Self, comptime dangling_component: [:0]const u8, delta: isize
         ) void {
+            std.debug.print("shift_pointers {s} {}\n", .{dangling_component, delta});
             inline for (traits, 0..) |trait, i| {
                 inline for (trait.components) |component| {
-                    if (std.mem.eql(u8, component.name, dangling_component)) {
-                        for (self.entities[i].items) |*e| {
-                            const old_address: isize = @intCast(@intFromPtr(
-                                @field(e, component.name)
-                            ));
-                            const new_address: isize = old_address + delta;
-                            const new_address_usize: usize = @intCast(new_address);
-                            @field(e, component.name) = @ptrFromInt(new_address_usize);
-                        }
+                    const is_component_found = comptime std.mem.eql(
+                        u8, component.name, dangling_component
+                    );
+                    if (!is_component_found) continue;
+                    for (self.entities[i].items) |*e| {
+                        const old_address: isize = @intCast(@intFromPtr(
+                            @field(e, component.name)
+                        ));
+                        const new_address: isize = old_address + delta;
+                        const new_address_usize: usize = @intCast(new_address);
+                        @field(e, component.name) = @ptrFromInt(new_address_usize);
                     }
                     break;
                 }
+            }
+        }
+
+        pub fn format(
+            self: Self,
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype
+        ) !void {
+            _ = fmt;
+            _ = options;
+            try writer.print("- Entity collections:\n", .{});
+            inline for (Self.traits, self.active_lengths, self.entities) |trait, len, list| {
+                try writer.print("  - {}: {}/{}\n", .{trait.type, len, list.items.len});
             }
         }
     };
@@ -268,11 +294,34 @@ pub fn World(comptime systems: []const type) type {
                 system.update();
             }
         }
+
+        pub fn format(
+            self: Self,
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype
+        ) !void {
+            _ = fmt;
+            _ = options;
+            try writer.print("Systems:\n", .{});
+            inline for (self.systems) |system| {
+                try writer.print("{}", .{system});
+            }
+            try writer.print("Components:\n", .{});
+            inline for (all_components) |component| {
+                try writer.print("  {s}: {}\n", .{
+                    component.name,
+                    @field(self.components, component.name).items.len
+                });
+            }
+        }
     };
 }
 
-fn update_system(system: anytype, entity_collections: anytype) void {
-    var iterator = toolkit.cartesian(entity_collections);
+fn update_system(
+    system: anytype, entity_collections: anytype, lengths: [entity_collections.len]usize,
+) void {
+    var iterator = toolkit.cartesian(entity_collections, lengths);
     while (iterator.next()) |entry| {
         @call(.auto, system, entry);
     }

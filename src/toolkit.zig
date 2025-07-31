@@ -20,6 +20,7 @@ fn Cartesian(comptime slice_types: type) type {
     
     return struct {
         slices: slice_types,
+        lengths: [len]usize,
         indices: [len]usize,
         finished: bool = false,
 
@@ -31,9 +32,9 @@ fn Cartesian(comptime slice_types: type) type {
                 field.* = slice[i];
             }
 
-            inline for (&self.indices, self.slices) |*i, slice| {
+            inline for (&self.indices, self.lengths) |*i, slice_len| {
                 i.* += 1;
-                if (i.* < slice.len) break;
+                if (i.* < slice_len) break;
                 i.* = 0;
             } else {
                 self.finished = true;
@@ -44,9 +45,10 @@ fn Cartesian(comptime slice_types: type) type {
     };
 }
 
-pub fn cartesian(slices: anytype) Cartesian(@TypeOf(slices)) {
+pub fn cartesian(slices: anytype, lengths: [slices.len]usize) Cartesian(@TypeOf(slices)) {
     return .{
         .slices = slices,
+        .lengths = lengths,
         .indices = [_]usize {0} ** slices.len,
     };
 }

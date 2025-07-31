@@ -56,12 +56,17 @@ fn control(target: Controllable) void {
     }
 }
 
-fn test_creation() void {
+fn test_creation(target: Controllable) void {
+    _ = target;
     if (rl.isKeyPressed(.f)) {
         world.add(.{
             .position = i32_2.from(.{128, 256}),
             .sprite = rl.loadTexture("assets/mannequin.png") catch unreachable,
+            .player_flag = PlayerFlag {},
         });
+    }
+    if (rl.isKeyPressed(.h)) {
+        std.debug.print("{}\n", .{world});
     }
 }
 
