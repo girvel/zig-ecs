@@ -63,18 +63,28 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
             return result;
         }
 
-        fn add(self: *Self, entity: anytype, component_storage: anytype) void {
+        fn plan_add(
+            self: *Self, entity: anytype, component_storage: anytype, creation_queue: anytype
+        ) void {
             inline for (0.., traits) |i, trait| {
                 inline for (trait.components) |component| {
                     if (!@hasField(@TypeOf(entity), component.name)) break;
                 } else {
                     var subject: trait.type = undefined;
                     inline for (trait.components) |component| {
-                        const items = @field(component_storage, component.name).items;
-                        @field(subject, component.name) = &items[items.len - 1];
+                        const storage_slice = @field(component_storage, component.name).items;
+                        const queue = @field(creation_queue, component.name).items;
+                        @field(subject, component.name)
+                            = &storage_slice.ptr[storage_slice.len + queue.len - 1];
                     }
                     self.entities[i].append(subject) catch unreachable;
                 }
+            }
+        }
+
+        fn flush_add(self: *Self) void {
+            inline for (&self.active_lengths, self.entities) |*len, list| {
+                len.* = list.items.len;
             }
         }
 
@@ -135,10 +145,6 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
                     }
                 },
             }
-
-            inline for (&self.active_lengths, self.entities) |*len, list| {
-                len.* = list.items.len;
-            }
         }
 
         fn shift_pointers(
@@ -152,11 +158,11 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
                     );
                     if (!is_component_found) continue;
                     for (self.entities[i].items) |*e| {
-                        const old_address: isize = @intCast(@intFromPtr(
+                        const old_address: isize = @bitCast(@intFromPtr(
                             @field(e, component.name)
                         ));
                         const new_address: isize = old_address + delta;
-                        const new_address_usize: usize = @intCast(new_address);
+                        const new_address_usize: usize = @bitCast(new_address);
                         @field(e, component.name) = @ptrFromInt(new_address_usize);
                     }
                     break;
@@ -210,31 +216,9 @@ pub fn World(comptime systems: []const type) type {
         };
     };
 
-    // const Entity = comptime blk: {
-    //     var result: []const toolkit.Field = &.{};
-    //     for (all_components) |component| {
-    //         result = result ++ .{toolkit.Field{
-    //             .name = component.name,
-    //             .type = ?*component.type,
-    //         }};
-    //     }
-    //     break :blk toolkit.Struct(@constCast(result));
-    // };
-
-    // const Genesis = struct {
-    //     creation_queue: std.ArrayList(Entity),
-    // };
-
-    // const GenesisSystem = (struct {
-    //     fn genesis_fn(genesis: Genesis) void {
-    //         for (genesis.creation_queue.items) |e| {
-    //             
-    //         }
-    //     }
-    // }{}).genesis_fn;
-
     return struct {
         components: ComponentStorage,
+        creation_queue: ComponentStorage,
         systems: std.meta.Tuple(systems),
 
         const Self = @This();
@@ -242,6 +226,7 @@ pub fn World(comptime systems: []const type) type {
             var result: Self = undefined;
             inline for (@typeInfo(ComponentStorage).@"struct".fields) |field| {
                 @field(result.components, field.name) = field.type.init(allocator);
+                @field(result.creation_queue, field.name) = field.type.init(allocator);
             }
             inline for (0.., systems) |i, system| {
                 result.systems[i] = system.init(allocator);
@@ -254,11 +239,11 @@ pub fn World(comptime systems: []const type) type {
             self_world.add(entity);
         }
 
-        pub fn add(self: *Self, entity: anytype) void {
-            const t = @TypeOf(entity);
+        pub fn plan_add(self: *Self, entity: anytype) void {
+            const T = @TypeOf(entity);
 
             inline for (all_components) |component| {
-                if (!@hasField(t, component.name)) continue;
+                if (!@hasField(T, component.name)) continue;
 
                 const component_value = @field(entity, component.name);
                 if (@TypeOf(component_value) != component.type) {
@@ -268,24 +253,39 @@ pub fn World(comptime systems: []const type) type {
                     );
                 }
 
+                @field(self.creation_queue, component.name)
+                    .append(component_value) catch unreachable;
+            }
+
+            inline for (&self.systems) |*system| {
+                system.plan_add(entity, &self.components, &self.creation_queue);
+            }
+        }
+
+        pub fn flush_add(self: *Self) void {
+            inline for (all_components) |component| {
                 var component_list = &@field(self.components, component.name);
+                var creation_queue = &@field(self.creation_queue, component.name);
                 const old_ptr = component_list.items.ptr;
-                component_list.append(component_value) catch unreachable;
+                component_list.appendSlice(creation_queue.items)
+                    catch unreachable;
                 const new_ptr = component_list.items.ptr;
 
                 if (new_ptr != old_ptr and component_list.items.len > 1) {
-                    const old_ptr_isize: isize = @intCast(@intFromPtr(old_ptr));
-                    const new_ptr_isize: isize = @intCast(@intFromPtr(new_ptr));
+                    const old_ptr_isize: isize = @bitCast(@intFromPtr(old_ptr));
+                    const new_ptr_isize: isize = @bitCast(@intFromPtr(new_ptr));
                     inline for (&self.systems) |*system| {
                         system.shift_pointers(
                             component.name, new_ptr_isize - old_ptr_isize
                         );
                     }
                 }
+                
+                creation_queue.clearRetainingCapacity();
             }
 
             inline for (&self.systems) |*system| {
-                system.add(entity, self.components);
+                system.flush_add();
             }
         }
 

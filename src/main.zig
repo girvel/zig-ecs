@@ -5,14 +5,20 @@ const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
 
 const World = ecs.World(&.{
+    ecs.System(flush_creation_queue, .none),
     ecs.System(begin_drawing, .none),
     ecs.System(draw, .none),
     ecs.System(end_drawing, .none),
     ecs.System(control, .none),
-    ecs.System(test_creation, .none)
+    ecs.System(test_creation, .none),
+    ecs.System(debug, .none),
 });
 
 var world: World = undefined;
+
+fn flush_creation_queue() void {
+    world.flush_add();
+}
 
 fn begin_drawing() void {
     rl.beginDrawing();
@@ -59,12 +65,15 @@ fn control(target: Controllable) void {
 fn test_creation(target: Controllable) void {
     _ = target;
     if (rl.isKeyPressed(.f)) {
-        world.add(.{
+        world.plan_add(.{
             .position = i32_2.from(.{128, 256}),
             .sprite = rl.loadTexture("assets/mannequin.png") catch unreachable,
             .player_flag = PlayerFlag {},
         });
     }
+}
+
+fn debug() void {
     if (rl.isKeyPressed(.h)) {
         std.debug.print("{}\n", .{world});
     }
@@ -83,12 +92,12 @@ pub fn main() !void {
     const mannequin = try rl.loadTexture("assets/mannequin.png");
     const moose_dude = try rl.loadTexture("assets/moose_dude.png");
 
-    world.add(.{
+    world.plan_add(.{
         .position = i32_2.from(.{0, 0}),
         .sprite = moose_dude,
     });
 
-    world.add(.{
+    world.plan_add(.{
         .position = i32_2.from(.{16, 0}),
         .sprite = mannequin,
         .player_flag = PlayerFlag{},
