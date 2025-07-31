@@ -27,13 +27,13 @@ fn begin_drawing() void {
 
 // TODO sprite or text
 const Drawable = struct {
-    position: *const i32_2,
-    sprite: *const rl.Texture2D,
+    position: *i32_2,
+    sprite: **rl.Texture2D,
 };
 
 fn draw(target: Drawable) void {
     const pos = target.position.*.items;
-    rl.drawTexture(target.sprite.*, pos[0], pos[1], .white);
+    rl.drawTexture(target.sprite.*.*, pos[0], pos[1], .white);
 }
 
 fn end_drawing() void {
@@ -42,11 +42,11 @@ fn end_drawing() void {
 
 const PlayerFlag = struct {};
 const Controllable = struct {
-    player_flag: *const PlayerFlag,
+    player_flag: *PlayerFlag,
     position: *i32_2,
 };
 
-const keymap = [_]std.meta.Tuple(&.{rl.KeyboardKey, i32_2}){
+const keymap = [_]std.meta.Tuple(&.{rl.KeyboardKey, i32_2}) {
     .{.w, i32_2.from(.{0, -16})},
     .{.a, i32_2.from(.{-16, 0})},
     .{.s, i32_2.from(.{0, 16})},
@@ -62,12 +62,19 @@ fn control(target: Controllable) void {
     }
 }
 
+const TextureStorage = struct {
+    mannequin: rl.Texture2D,
+    moose_dude: rl.Texture2D,
+};
+
+var texture_storage: TextureStorage = undefined;
+
 fn test_creation(target: Controllable) void {
     _ = target;
     if (rl.isKeyPressed(.f)) {
         world.plan_add(.{
             .position = i32_2.from(.{128, 256}),
-            .sprite = rl.loadTexture("assets/mannequin.png") catch unreachable,
+            .sprite = &texture_storage.mannequin,
             .player_flag = PlayerFlag {},
         });
     }
@@ -89,21 +96,28 @@ pub fn main() !void {
 
     world = World.init(allocator);
 
-    const mannequin = try rl.loadTexture("assets/mannequin.png");
-    const moose_dude = try rl.loadTexture("assets/moose_dude.png");
+    texture_storage = .{
+        .moose_dude = try rl.loadTexture("assets/mannequin.png"),
+        .mannequin = try rl.loadTexture("assets/moose_dude.png"),
+    };
 
     world.plan_add(.{
         .position = i32_2.from(.{0, 0}),
-        .sprite = moose_dude,
+        .sprite = &texture_storage.moose_dude,
     });
 
     world.plan_add(.{
         .position = i32_2.from(.{16, 0}),
-        .sprite = mannequin,
+        .sprite = &texture_storage.mannequin,
         .player_flag = PlayerFlag{},
+    });
+
+    world.plan_add(.{
+        .texture_storage = texture_storage,
     });
 
     while (!rl.windowShouldClose()) {
         world.update();
+        std.Thread.sleep(10_000_000);
     }
 }

@@ -249,7 +249,8 @@ pub fn World(comptime systems: []const type) type {
                 if (@TypeOf(component_value) != component.type) {
                     @compileError(
                         "entity's ." ++ component.name ++
-                        " should be of type " ++ @typeName(component.type)
+                        " should be of type " ++ @typeName(component.type) ++
+                        ", got " ++ @typeName(@TypeOf(component_value)) ++ " instead"
                     );
                 }
 
