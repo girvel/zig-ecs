@@ -150,7 +150,6 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
         fn shift_pointers(
             self: *Self, comptime dangling_component: [:0]const u8, delta: isize
         ) void {
-            std.debug.print("shift_pointers {s} {}\n", .{dangling_component, delta});
             inline for (traits, 0..) |trait, i| {
                 inline for (trait.components) |component| {
                     const is_component_found = comptime std.mem.eql(
@@ -275,10 +274,10 @@ pub fn World(comptime systems: []const type) type {
                 if (new_ptr != old_ptr and component_list.items.len > 1) {
                     const old_ptr_isize: isize = @bitCast(@intFromPtr(old_ptr));
                     const new_ptr_isize: isize = @bitCast(@intFromPtr(new_ptr));
+                    const delta = new_ptr_isize - old_ptr_isize;
+                    std.debug.print("shift_pointers {s} {}\n", .{component.name, delta});
                     inline for (&self.systems) |*system| {
-                        system.shift_pointers(
-                            component.name, new_ptr_isize - old_ptr_isize
-                        );
+                        system.shift_pointers(component.name, delta);
                     }
                 }
                 
