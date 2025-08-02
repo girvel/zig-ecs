@@ -5,8 +5,6 @@ const vector = @import("vector.zig");
 const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
 
-// TODO managing stuff like strings?
-
 
 const Inert = struct {
     position: *i32_2,

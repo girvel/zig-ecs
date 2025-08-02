@@ -4,14 +4,23 @@ const vector = @import("vector.zig");
 const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
 
-const World = ecs.World(&.{
-    ecs.System(flush_creation_queue, .none),
-    ecs.System(begin_drawing, .none),
-    ecs.System(draw, .none),
-    ecs.System(end_drawing, .none),
-    ecs.System(control, .none),
-    ecs.System(test_creation, .none),
-    ecs.System(debug, .none),
+const Entity = struct {
+    position: ?*i32_2,
+    sprite: ?**rl.Texture2D,
+    player_flag: ?*PlayerFlag,
+};
+
+const World = ecs.World(.{
+    .systems = &.{
+        ecs.System(flush_creation_queue, .none),
+        ecs.System(begin_drawing, .none),
+        ecs.System(draw, .none),
+        ecs.System(end_drawing, .none),
+        ecs.System(control, .none),
+        ecs.System(test_creation, .none),
+        ecs.System(debug, .none),
+    },
+    .entities = &.{Entity},
 });
 
 var world: World = undefined;

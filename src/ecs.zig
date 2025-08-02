@@ -185,11 +185,16 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
     };
 }
 
-pub fn World(comptime systems: []const type) type {
+pub const WorldConfig = struct {
+    systems: []const type,
+    entities: []const type,
+};
+
+pub fn World(comptime config: WorldConfig) type {
     const ComponentStorage, const all_components = comptime blk: {
         var storage_fields: []const toolkit.Field = &.{};
         var all_components: []const Component = &.{};
-        for (systems) |system| {
+        for (config.systems) |system| {
             for (system.traits) |trait| {
                 for (trait.components) |component| {
                     for (storage_fields) |field| {
@@ -215,10 +220,30 @@ pub fn World(comptime systems: []const type) type {
         };
     };
 
+    const EntityStorage = comptime blk: {
+        var fields: [config.entities.len]toolkit.Field = undefined;
+        for (&fields, config.entities) |*field, Entity| {
+            field.* = .{
+                .name = @typeName(Entity),
+                .type = std.ArrayList(Entity),
+            };
+        }
+        break :blk toolkit.Struct(&fields);
+    };
+
     return struct {
         components: ComponentStorage,
         creation_queue: ComponentStorage,
-        systems: std.meta.Tuple(systems),
+        systems: std.meta.Tuple(config.systems),
+        entities: EntityStorage,
+        entities_lengths: [config.entities.len]usize,
+        // TODO! we have ArrayLists with additional length here, and when storing entities for
+        //       systems. Also we have to pass the additional length as a second argument to 
+        //       toolkit.cartesian, that's bothersome. Maybe a type like LimitedList or
+        //       RetainingList?
+        //
+        //       Systems share adding logic with EntityStorage here. Maybe extract EntityStorage()
+        //       instead?
 
         const Self = @This();
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -227,15 +252,14 @@ pub fn World(comptime systems: []const type) type {
                 @field(result.components, field.name) = field.type.init(allocator);
                 @field(result.creation_queue, field.name) = field.type.init(allocator);
             }
-            inline for (0.., systems) |i, system| {
+            inline for (0.., config.systems) |i, system| {
                 result.systems[i] = system.init(allocator);
             }
+            inline for (0.., config.entities) |i, Entity| {
+                @field(result.entities, @typeName(Entity)) = std.ArrayList(Entity).init(allocator);
+                result.entities_lengths[i] = 0;
+            }
             return result;
-        }
-
-        pub fn _add(self: *anyopaque, entity: anytype) void {
-            var self_world: Self = @ptrCast(self);
-            self_world.add(entity);
         }
 
         pub fn plan_add(self: *Self, entity: anytype) void {
@@ -260,6 +284,27 @@ pub fn World(comptime systems: []const type) type {
             inline for (&self.systems) |*system| {
                 system.plan_add(entity, &self.components, &self.creation_queue);
             }
+
+            // TODO! entity storing logic is shared with ecs.System
+            inline for (config.entities) |Entity| {
+                const fields = @typeInfo(Entity).@"struct".fields;
+                inline for (fields) |field| {
+                    if (!@hasField(@TypeOf(entity), field.name)) break;
+                    // TODO! handle type mismatch?
+                    // TODO! handle optional fields
+                } else {
+                    var subject: Entity = undefined;
+                    inline for (fields) |field| {
+                        const storage_slice = @field(self.components, field.name).items;
+                        const queue = @field(self.creation_queue, field.name).items;
+                        @field(subject, field.name)
+                            = &storage_slice.ptr[storage_slice.len + queue.len - 1];
+                    }
+                    @field(self.entities, @typeName(Entity)).append(subject) catch unreachable;
+                }
+            }
+
+            // TODO! error if no data got stored
         }
 
         pub fn flush_add(self: *Self) void {
@@ -287,6 +332,10 @@ pub fn World(comptime systems: []const type) type {
             inline for (&self.systems) |*system| {
                 system.flush_add();
             }
+
+            inline for (0.., @typeInfo(EntityStorage).@"struct".fields) |i, field| {
+                self.entities_lengths[i] = @field(self.entities, field.name).items.len;
+            }
         }
 
         pub fn update(self: *Self) void {
@@ -309,9 +358,19 @@ pub fn World(comptime systems: []const type) type {
             }
             try writer.print("Components:\n", .{});
             inline for (all_components) |component| {
-                try writer.print("  {s}: {}\n", .{
+                try writer.print("  {s}: {}+{}\n", .{
                     component.name,
-                    @field(self.components, component.name).items.len
+                    @field(self.components, component.name).items.len,
+                    @field(self.creation_queue, component.name).items.len,
+                });
+            }
+            try writer.print("Entities:\n", .{});
+            // TODO! unify field access
+            inline for (0.., @typeInfo(EntityStorage).@"struct".fields) |i, field|  {
+                try writer.print("  {s}: {}/{}\n", .{
+                    field.name,
+                    self.entities_lengths[i],
+                    @field(self.entities, field.name).items.len,
                 });
             }
         }
