@@ -3,6 +3,7 @@ const rl = @import("raylib");
 const vector = @import("vector.zig");
 const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
+const toolkit = @import("toolkit.zig");
 
 const Entity = struct {
     position: *i32_2,
@@ -25,15 +26,8 @@ const World = ecs.World(.{
 
 var world: World = undefined;
 
-var once = false;
 fn flush_creation_queue() void {
-    if (!once) std.debug.print("{any}\n", .{world.entities_globally.flushed_lengths});
     world.flush_add();
-    if (!once) {
-        std.debug.print("{any}\n", .{world.entities_globally.flushed_lengths});
-        std.debug.print("{}\n", .{world.entities_globally.lists[0].items[0]});
-        once = true;
-    }
 }
 
 fn begin_drawing() void {
@@ -96,8 +90,7 @@ fn test_creation(target: Controllable) void {
     }
 }
 
-// TODO! becomes invalid after shift_pointers
-var original_player_character: *Entity = undefined;
+var original_player_character: toolkit.Ref(Entity) = undefined;
 
 fn debug() void {
     if (rl.isKeyPressed(.h)) {
@@ -105,10 +98,7 @@ fn debug() void {
     }
 
     if (rl.isKeyPressed(.backspace)) {
-        std.debug.print("{*}\n", .{original_player_character.sprite});
-        std.debug.print("{*}\n", .{original_player_character.position});
-        original_player_character.sprite.* = &texture_storage.mannequin;
-        std.debug.print("{*}\n", .{original_player_character.sprite});
+        original_player_character.get().sprite.* = &texture_storage.mannequin;
     }
 }
 
@@ -139,8 +129,11 @@ pub fn main() !void {
     });
 
     original_player_character = blk: {
-        const list = world.entities_globally.lists[0].items;
-        break :blk &list[list.len - 1];
+        const list = &world.entities_globally.lists[0];
+        break :blk toolkit.Ref(Entity) {
+            .list = list,
+            .index = list.items.len - 1,
+        };
     };
 
     world.plan_add(.{

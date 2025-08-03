@@ -65,8 +65,10 @@ test {
         .{2, 2.72},
         .{3, 2.72},
     };
+    
+    const lengths = [_]usize{3, 2};
 
-    var it = cartesian(.{slice1, slice2});
+    var it = cartesian(.{slice1, slice2}, lengths);
     var i: usize = 0;
     while (it.next()) |entry| {
         try std.testing.expect(entry[0] == result[i][0]);
@@ -112,6 +114,20 @@ pub fn Promise(comptime T: type) type {
         pub fn resolve(self: Self, value: T) void {
             if (self.callback == null) return;
             self.callback(value);
+        }
+    };
+}
+
+// Reference for a value stored in ArrayList
+pub fn Ref(comptime T: type) type {
+    return struct {
+        list: *std.ArrayList(T),
+        index: usize,
+
+        const Self = @This();
+
+        pub fn get(self: Self) *T {
+            return &self.list.items[self.index];
         }
     };
 }
