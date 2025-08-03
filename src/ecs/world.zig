@@ -12,8 +12,8 @@ pub fn World(comptime config: WorldConfig) type {
         var storage_fields: []const toolkit.Field = &.{};
         var all_components: []const common.Component = &.{};
         for (config.systems) |system| {
-            for (system.traits) |trait| {
-                for (trait.components) |component| {
+            for (system.EntityStorage.requirements) |requirement| {
+                for (requirement.components) |component| {
                     for (storage_fields) |field| {
                         if (std.mem.eql(u8, field.name, component.name)) break;
                     } else {
@@ -121,7 +121,8 @@ pub fn World(comptime config: WorldConfig) type {
                 }
             }
 
-            // TODO! error if no data got stored
+            // TODO! error if some fields were not stored?
+            //       or only if no fields were stored?
         }
 
         pub fn flush_add(self: *Self) void {
