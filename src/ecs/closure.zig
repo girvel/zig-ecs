@@ -1,15 +1,33 @@
 const std = @import("std");
 
-pub fn Closure(comptime Argument: type, comptime Return: type) type {
-    // @Type(.{ .@"fn" = .{
+pub fn Closure(comptime arg_types: []const type, comptime Return: type) type {
+    // const InnerFunction = @Type(.{ .@"fn" = .{
     //     .calling_convention = .auto,
     //     .is_generic = false,
     //     .is_var_args = false,
     //     .return_type = Return,
-    //     .params = 
+    //     .params = params: {
+    //         var params: [arg_types.len + 1]std.builtin.Type.Fn.Param = undefined;
+    //         params[0] = .{
+    //             .is_generic = false,
+    //             .is_noalias = false,
+    //             .type = *anyopaque,
+    //         };
+    //         for (1.., arg_types) |i, Arg| {
+    //             params[i] = .{
+    //                 .is_generic = false,
+    //                 .is_noalias = false,
+    //                 .type = Arg,
+    //             };
+    //         }
+    //         break :params params;
+    //     },
     // }});
+
+    const Args = std.meta.Tuple(arg_types);
+
     return struct {
-        fn_pointer: *const fn(*anyopaque, Argument) Return,
+        fn_pointer: *const fn(*anyopaque, Args) Return,
         payload: *anyopaque,
         allocator: std.mem.Allocator,
         deallocate: *const fn(std.mem.Allocator, *anyopaque) void,
@@ -21,9 +39,10 @@ pub fn Closure(comptime Argument: type, comptime Return: type) type {
 
             var result: Self = undefined;
             result.fn_pointer = (struct {
-                fn call(local_payload: *anyopaque, argument: Argument) Return {
+                fn call(local_payload: *anyopaque, args: Args) Return {
                     const payload_typed: *Payload = @ptrCast(@alignCast(local_payload));
-                    return Payload.invoke(payload_typed, argument);
+                    const all_args = .{payload_typed} ++ args;
+                    return @call(.auto, Payload.invoke, all_args);
                 }
             }).call;
 
@@ -46,30 +65,27 @@ pub fn Closure(comptime Argument: type, comptime Return: type) type {
             self.deallocate(self.allocator, self.payload);
         }
 
-        pub fn invoke(self: *Self, argument: Argument) Return {
-            return self.fn_pointer(self.payload, argument);
+        pub fn invoke(self: *Self, args: Args) Return {
+            return self.fn_pointer(self.payload, args);
         }
     };
 }
 
 test {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     const Base = struct {
         a: i32,
-        b: i32,
-        pub fn invoke(self: *@This(), c: i32) i32 {
-            return self.b * self.b - 2 * self.a * c;
+        pub fn invoke(self: *@This(), b: i32, c: i32) i32 {
+            return b * b - 2 * self.a * c;
         }
     };
-    const RequiredClosure = Closure(i32, i32);
+    const RequiredClosure = Closure(&.{i32, i32}, i32);
     
     var result: [10]RequiredClosure = undefined;
     for (&result, 0..) |*closure, i| {
         closure.* = try RequiredClosure.init(allocator, Base {
             .a = @intCast(i),
-            .b = 0,
         });
     }
     defer for (result) |closure| {
@@ -78,6 +94,6 @@ test {
 
     for (&result, 0..) |*closure, i| {
         const i_i32: i32 = @intCast(i);
-        try std.testing.expectEqual(-2 * i_i32, closure.invoke(1));
+        try std.testing.expectEqual(-2 * i_i32, closure.invoke(.{0, 1}));
     }
 }
