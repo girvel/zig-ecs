@@ -119,7 +119,7 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
         ) !void {
             _ = fmt;
             _ = options;
-            try writer.print("- System:\n{}\n", .{self.targets});
+            try writer.print("- Targets:\n{}\n", .{self.targets});
         }
     };
 }

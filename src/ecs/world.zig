@@ -1,13 +1,15 @@
+const entity_storage = @import("entity_storage.zig");
 const toolkit = @import("../toolkit.zig");
 const common = @import("common.zig");
 const std = @import("std");
 
 pub const WorldConfig = struct {
     systems: []const type,
-    entities: []const type,
+    entity_types: []const type,
 };
 
 pub fn World(comptime config: WorldConfig) type {
+    // TODO! extract ComponentStorage
     const ComponentStorage, const all_components = comptime blk: {
         var storage_fields: []const toolkit.Field = &.{};
         var all_components: []const common.Component = &.{};
@@ -37,30 +39,13 @@ pub fn World(comptime config: WorldConfig) type {
         };
     };
 
-    const EntityStorage = comptime blk: {
-        var fields: [config.entities.len]toolkit.Field = undefined;
-        for (&fields, config.entities) |*field, Entity| {
-            field.* = .{
-                .name = @typeName(Entity),
-                .type = std.ArrayList(Entity),
-            };
-        }
-        break :blk toolkit.Struct(&fields);
-    };
+    const EntityStorage = entity_storage.New(config.entity_types);
 
     return struct {
         components: ComponentStorage,
         creation_queue: ComponentStorage,
         systems: std.meta.Tuple(config.systems),
-        entities: EntityStorage,
-        entities_lengths: [config.entities.len]usize,
-        // TODO! we have ArrayLists with additional length here, and when storing entities for
-        //       systems. Also we have to pass the additional length as a second argument to 
-        //       toolkit.cartesian, that's bothersome. Maybe a type like LimitedList or
-        //       RetainingList?
-        //
-        //       Systems share adding logic with EntityStorage here. Maybe extract EntityStorage()
-        //       instead?
+        entities_globally: EntityStorage,
 
         const Self = @This();
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -72,10 +57,7 @@ pub fn World(comptime config: WorldConfig) type {
             inline for (0.., config.systems) |i, system| {
                 result.systems[i] = system.init(allocator);
             }
-            inline for (0.., config.entities) |i, Entity| {
-                @field(result.entities, @typeName(Entity)) = std.ArrayList(Entity).init(allocator);
-                result.entities_lengths[i] = 0;
-            }
+            result.entities_globally = EntityStorage.init(allocator);
             return result;
         }
 
@@ -102,24 +84,7 @@ pub fn World(comptime config: WorldConfig) type {
                 system.plan_add(entity, &self.components, &self.creation_queue);
             }
 
-            // TODO! entity storing logic is shared with ecs.System
-            inline for (config.entities) |Entity| {
-                const fields = @typeInfo(Entity).@"struct".fields;
-                inline for (fields) |field| {
-                    if (!@hasField(@TypeOf(entity), field.name)) break;
-                    // TODO! handle type mismatch?
-                    // TODO! handle optional fields
-                } else {
-                    var subject: Entity = undefined;
-                    inline for (fields) |field| {  // TODO! for anytype entity's fields, not Entity's
-                        const storage_slice = @field(self.components, field.name).items;
-                        const queue = @field(self.creation_queue, field.name).items;
-                        @field(subject, field.name)
-                            = &storage_slice.ptr[storage_slice.len + queue.len - 1];
-                    }
-                    @field(self.entities, @typeName(Entity)).append(subject) catch unreachable;
-                }
-            }
+            self.entities_globally.plan_add(entity, &self.components, &self.creation_queue);
 
             // TODO! error if some fields were not stored?
             //       or only if no fields were stored?
@@ -142,7 +107,7 @@ pub fn World(comptime config: WorldConfig) type {
                     inline for (&self.systems) |*system| {
                         system.shift_pointers(component.name, delta);
                     }
-                    self.shift_pointers(component.name, delta);
+                    self.entities_globally.shift_pointers(component.name, delta);
                 }
                 
                 creation_queue.clearRetainingCapacity();
@@ -152,36 +117,12 @@ pub fn World(comptime config: WorldConfig) type {
                 system.flush_add();
             }
 
-            inline for (0.., @typeInfo(EntityStorage).@"struct".fields) |i, field| {
-                self.entities_lengths[i] = @field(self.entities, field.name).items.len;
-            }
+            self.entities_globally.flush_add();
         }
 
         pub fn update(self: *Self) void {
             inline for (&self.systems) |*system| {
                 system.update();
-            }
-        }
-
-        pub fn shift_pointers(
-            self: *Self, comptime dangling_component: [:0]const u8, delta: isize
-        ) void {
-            inline for (config.entities) |Entity| {
-                inline for (@typeInfo(Entity).@"struct".fields) |field| {
-                    const is_component_found = comptime std.mem.eql(
-                        u8, field.name, dangling_component
-                    );
-                    if (!is_component_found) continue;
-                    for (@field(self.entities, @typeName(Entity)).items) |*e| {
-                        const old_address: isize = @bitCast(@intFromPtr(
-                            @field(e, field.name)
-                        ));
-                        const new_address: isize = old_address + delta;
-                        const new_address_usize: usize = @bitCast(new_address);
-                        @field(e, field.name) = @ptrFromInt(new_address_usize);
-                    }
-                    break;
-                }
             }
         }
 
@@ -205,15 +146,7 @@ pub fn World(comptime config: WorldConfig) type {
                     @field(self.creation_queue, component.name).items.len,
                 });
             }
-            try writer.print("Entities:\n", .{});
-            // TODO! unify field access
-            inline for (0.., @typeInfo(EntityStorage).@"struct".fields) |i, field|  {
-                try writer.print("  {s}: {}/{}\n", .{
-                    field.name,
-                    self.entities_lengths[i],
-                    @field(self.entities, field.name).items.len,
-                });
-            }
+            try writer.print("Entities globally:\n{}", .{self.entities_globally});
         }
     };
 }

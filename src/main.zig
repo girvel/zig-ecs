@@ -5,9 +5,9 @@ const i32_2 = vector.Vector(i32, 2);
 const ecs = @import("ecs.zig");
 
 const Entity = struct {
-    position: ?*i32_2,
-    sprite: ?**rl.Texture2D,
-    player_flag: ?*PlayerFlag,
+    position: *i32_2,
+    sprite: **rl.Texture2D,
+    player_flag: *PlayerFlag,
 };
 
 const World = ecs.World(.{
@@ -20,18 +20,18 @@ const World = ecs.World(.{
         ecs.System(test_creation, .none),
         ecs.System(debug, .none),
     },
-    .entities = &.{Entity},
+    .entity_types = &.{Entity},
 });
 
 var world: World = undefined;
 
 var once = false;
 fn flush_creation_queue() void {
-    if (!once) std.debug.print("{any}\n", .{world.entities_lengths});
+    if (!once) std.debug.print("{any}\n", .{world.entities_globally.flushed_lengths});
     world.flush_add();
     if (!once) {
-        std.debug.print("{any}\n", .{world.entities_lengths});
-        std.debug.print("{}\n", .{world.entities.@"main.Entity".items[0]});
+        std.debug.print("{any}\n", .{world.entities_globally.flushed_lengths});
+        std.debug.print("{}\n", .{world.entities_globally.lists[0].items[0]});
         once = true;
     }
 }
@@ -96,6 +96,7 @@ fn test_creation(target: Controllable) void {
     }
 }
 
+// TODO! becomes invalid after shift_pointers
 var original_player_character: *Entity = undefined;
 
 fn debug() void {
@@ -104,9 +105,10 @@ fn debug() void {
     }
 
     if (rl.isKeyPressed(.backspace)) {
-        std.debug.print("{*}\n", .{original_player_character.sprite.?});
-        original_player_character.sprite.?.* = &texture_storage.mannequin;
-        std.debug.print("{*}\n", .{original_player_character.sprite.?});
+        std.debug.print("{*}\n", .{original_player_character.sprite});
+        std.debug.print("{*}\n", .{original_player_character.position});
+        original_player_character.sprite.* = &texture_storage.mannequin;
+        std.debug.print("{*}\n", .{original_player_character.sprite});
     }
 }
 
@@ -137,7 +139,7 @@ pub fn main() !void {
     });
 
     original_player_character = blk: {
-        const list = @field(world.entities, @typeName(Entity)).items;
+        const list = world.entities_globally.lists[0].items;
         break :blk &list[list.len - 1];
     };
 

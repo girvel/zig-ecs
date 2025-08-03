@@ -52,6 +52,8 @@ pub fn New(comptime entity_types: []const type) type {
             inline for (0.., requirements) |i, requirement| {
                 inline for (requirement.components) |component| {
                     if (!@hasField(@TypeOf(entity), component.name)) break;
+                    // TODO! handle type mismatch?
+                    // TODO! handle optional fields
                 } else {
                     var subject: requirement.type = undefined;
                     inline for (requirement.components) |component| {
@@ -102,9 +104,8 @@ pub fn New(comptime entity_types: []const type) type {
         ) !void {
             _ = fmt;
             _ = options;
-            try writer.print("    - EntityStorage:\n", .{});
             inline for (requirements, self.flushed_lengths, self.lists) |trait, len, list| {
-                try writer.print("      - {}: {}/{}\n", .{trait.type, len, list.items.len});
+                try writer.print("    - {}: {}/{}\n", .{trait.type, len, list.items.len});
             }
         }
     };
