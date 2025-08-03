@@ -53,60 +53,51 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
         }
 
         pub fn update(self: *Self) void {
-            const TupleOfSlices = comptime blk: {
-                var result: [EntityStorage.requirements.len]type = undefined;
-                for (&result, EntityStorage.requirements) |*ResultSlice, requirement| {
-                    ResultSlice.* = []requirement.type;
-                }
-                break :blk std.meta.Tuple(&result);
-            };
-
-            const cpu_n = std.Thread.getCpuCount() catch unreachable;
+            //const cpu_n = std.Thread.getCpuCount() catch unreachable;
             switch (threading) {
                 .none => {
-                    var to_iterate: TupleOfSlices = undefined;
-                    inline for (0..self.targets.lists.len) |i| {
-                        to_iterate[i] = self.targets.lists[i].items;
-                    }
-                    update_system(system_fn, to_iterate, self.targets.flushed_lengths);
+                    update_system(system_fn, &self.targets);
                 },
 
                 .batch_based => |threading_config| {
-                    var pool: std.Thread.Pool = undefined;
-                    pool.init(.{.allocator = self.allocator}) catch unreachable;
-                    defer pool.deinit();
+                    _ = threading_config;
+                    unreachable;
+                    // TODO revive batch-based using new .cartesian
+                    // var pool: std.Thread.Pool = undefined;
+                    // pool.init(.{.allocator = self.allocator}) catch unreachable;
+                    // defer pool.deinit();
 
-                    const batches_n = std.math.divCeil(
-                        usize,
-                        self.targets.lists[threading_config.argument_i].items.len,
-                        threading_config.batch_size,
-                    ) catch unreachable;
+                    // const batches_n = std.math.divCeil(
+                    //     usize,
+                    //     self.targets.lists[threading_config.argument_i].items.len,
+                    //     threading_config.batch_size,
+                    // ) catch unreachable;
 
-                    for (0..batches_n) |batch_i| {
-                        var to_iterate: TupleOfSlices = undefined;
-                        var active_lengths = self.targets.flushed_lengths;
-                        inline for (0..self.targets.lists.len) |argument_i| {
-                            if (argument_i == threading_config.argument_i) {
-                                const slice = self.targets.lists[argument_i].items;
-                                to_iterate[argument_i] = slice[
-                                    threading_config.batch_size * batch_i / cpu_n..
-                                    @min(
-                                        threading_config.batch_size * (batch_i + 1) / cpu_n,
-                                        self.targets.flushed_lengths[argument_i] - 1,
-                                    )
-                                ];
-                                active_lengths[argument_i] = to_iterate[argument_i].len;
-                            } else {
-                                to_iterate[argument_i] = self.targets.lists[argument_i].items;
-                            }
-                        }
+                    // for (0..batches_n) |batch_i| {
+                    //     var to_iterate: TupleOfSlices = undefined;
+                    //     var active_lengths = self.targets.flushed_lengths;
+                    //     inline for (0..self.targets.lists.len) |argument_i| {
+                    //         if (argument_i == threading_config.argument_i) {
+                    //             const slice = self.targets.lists[argument_i].items;
+                    //             to_iterate[argument_i] = slice[
+                    //                 threading_config.batch_size * batch_i / cpu_n..
+                    //                 @min(
+                    //                     threading_config.batch_size * (batch_i + 1) / cpu_n,
+                    //                     self.targets.flushed_lengths[argument_i] - 1,
+                    //                 )
+                    //             ];
+                    //             active_lengths[argument_i] = to_iterate[argument_i].len;
+                    //         } else {
+                    //             to_iterate[argument_i] = self.targets.lists[argument_i].items;
+                    //         }
+                    //     }
 
-                        pool.spawn(update_system, .{
-                            system_fn,
-                            to_iterate,
-                            active_lengths,
-                        }) catch unreachable;
-                    }
+                    //     pool.spawn(update_system, .{
+                    //         system_fn,
+                    //         to_iterate,
+                    //         active_lengths,
+                    //     }) catch unreachable;
+                    // }
                 },
             }
         }
@@ -124,12 +115,10 @@ pub fn System(comptime system_fn: anytype, threading: Threading) type {
     };
 }
 
-fn update_system(
-    system: anytype, entity_collections: anytype, lengths: [entity_collections.len]usize,
-) void {
-    var iterator = toolkit.cartesian(entity_collections, lengths);
+fn update_system(system_fn: anytype, targets: anytype) void {
+    var iterator = targets.cartesian();
     while (iterator.next()) |entry| {
-        @call(.auto, system, entry);
+        @call(.auto, system_fn, entry);
     }
 }
 

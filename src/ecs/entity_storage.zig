@@ -96,6 +96,12 @@ pub fn New(comptime entity_types: []const type) type {
             }
         }
 
+        pub fn cartesian(self: *Self) Cartesian(Self) {
+            return .{
+                .storage = self,
+            };
+        }
+
         pub fn format(
             self: Self,
             comptime fmt: []const u8,
@@ -110,3 +116,63 @@ pub fn New(comptime entity_types: []const type) type {
         }
     };
 }
+
+fn Cartesian(comptime EntityStorage: type) type {
+    const len = EntityStorage.requirements.len;
+    const IteratorReturn = blk: {
+        var fs: [len]type = undefined;
+        for (&fs, EntityStorage.requirements) |*f, requirement| {
+            f.* = requirement.type;
+        }
+        break :blk std.meta.Tuple(&fs);
+    };
+    
+    return struct {
+        storage: *EntityStorage,
+        indices: [len]usize = [_]usize{0} ** len,
+        finished: bool = false,
+
+        pub fn next(self: *@This()) ?IteratorReturn {
+            if (self.finished) return null;
+
+            var result: IteratorReturn = undefined;
+            inline for (&result, self.indices, self.storage.lists) |*field, i, list| {
+                field.* = list.items[i];
+            }
+
+            inline for (&self.indices, self.storage.flushed_lengths) |*i, flushed_len| {
+                i.* += 1;
+                if (i.* < flushed_len) break;
+                i.* = 0;
+            } else {
+                self.finished = true;
+            }
+
+            return result;
+        }
+    };
+}
+
+// test {
+//     const slice1 = ([_]i32{1, 2, 3})[0..];
+//     const slice2 = ([_]f64{3.14, 2.72})[0..];
+// 
+//     const result = [_]struct {i32, f64} {
+//         .{1, 3.14},
+//         .{2, 3.14},
+//         .{3, 3.14},
+//         .{1, 2.72},
+//         .{2, 2.72},
+//         .{3, 2.72},
+//     };
+//     
+//     const lengths = [_]usize{3, 2};
+// 
+//     var it = cartesian(.{slice1, slice2}, lengths);
+//     var i: usize = 0;
+//     while (it.next()) |entry| {
+//         try std.testing.expect(entry[0] == result[i][0]);
+//         try std.testing.expect(entry[1] == result[i][1]);
+//         i += 1;
+//     }
+// }
