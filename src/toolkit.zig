@@ -25,33 +25,3 @@ pub fn Struct(fields: []Field) type {
         .is_tuple = false,
     }});
 }
-
-pub fn Promise(comptime T: type) type {
-    return struct {
-        callback: ?fn (T) void = null,
-        const Self = @This();
-        pub fn then(self: *Self, callback: fn (T) void) void {
-            if (self.callback != null) @panic(".then on promise that already has been .then-ed");
-            self.callback = callback;
-        }
-
-        pub fn resolve(self: Self, value: T) void {
-            if (self.callback == null) return;
-            self.callback(value);
-        }
-    };
-}
-
-// Reference for a value stored in ArrayList
-pub fn Ref(comptime T: type) type {
-    return struct {
-        list: *std.ArrayList(T),
-        index: usize,
-
-        const Self = @This();
-
-        pub fn get(self: Self) *T {
-            return &self.list.items[self.index];
-        }
-    };
-}

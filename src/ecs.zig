@@ -5,3 +5,5 @@ pub const System = system.System;
 pub const Threading = system.Threading;
 pub const World = world.World;
 pub const WorldConfig = world.WorldConfig;
+pub const Ref = world.Ref;
+pub const Promise = world.Promise;

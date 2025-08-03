@@ -41,11 +41,20 @@ pub fn World(comptime config: WorldConfig) type {
 
     const EntityStorage = entity_storage.New(config.entity_types);
 
+    const Promises = comptime blk: {
+        var types: [config.entity_types.len]type = undefined;
+        for (&types, config.entity_types) |*PromiseList, Entity| {
+            PromiseList.* = std.ArrayList(Promise(Entity));
+        }
+        break :blk std.meta.Tuple(&types);
+    };
+
     return struct {
         components: ComponentStorage,
         creation_queue: ComponentStorage,
         systems: std.meta.Tuple(config.systems),
         entities_globally: EntityStorage,
+        promises: Promises,
 
         const Self = @This();
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -58,6 +67,9 @@ pub fn World(comptime config: WorldConfig) type {
                 result.systems[i] = system.init(allocator);
             }
             result.entities_globally = EntityStorage.init(allocator);
+            inline for (&result.promises, config.entity_types) |*promise, Entity| {
+                promise.* = std.ArrayList(Promise(Entity)).init(allocator);
+            }
             return result;
         }
 
@@ -90,6 +102,21 @@ pub fn World(comptime config: WorldConfig) type {
             //       or only if no fields were stored?
         }
 
+        pub fn promise_add(self: *Self, comptime Entity: type, entity: anytype) *Promise(Entity) {
+            const list_index = comptime for (0.., EntityStorage.requirements) |i, requirement| {
+                if (requirement.type == Entity) break i;
+            } else @compileError(@typeName(Entity) ++ " is not listed in world's entity types");
+            // TODO! check that entity fits Entity
+            self.plan_add(entity);
+            const list = &self.entities_globally.lists[list_index];
+            self.promises[list_index].append(Promise(Entity) { .ref = .{
+                .list = list,
+                .index = list.items.len - 1,
+            }}) catch unreachable;
+            const promise_slice = self.promises[list_index].items;
+            return &promise_slice[promise_slice.len - 1];
+        }
+
         pub fn flush_add(self: *Self) void {
             inline for (all_components) |component| {
                 var component_list = &@field(self.components, component.name);
@@ -118,6 +145,14 @@ pub fn World(comptime config: WorldConfig) type {
             }
 
             self.entities_globally.flush_add();
+
+            inline for (&self.promises) |*promise_list| {
+                for (promise_list.items) |promise| {
+                    promise.resolve();
+                }
+
+                promise_list.clearRetainingCapacity();
+            }
         }
 
         pub fn update(self: *Self) void {
@@ -147,6 +182,37 @@ pub fn World(comptime config: WorldConfig) type {
                 });
             }
             try writer.print("Entities globally:\n{}", .{self.entities_globally});
+        }
+    };
+}
+
+pub fn Promise(comptime T: type) type {
+    return struct {
+        ref: Ref(T),
+        callback: ?*const fn (Ref(T)) void = null,  // TODO use struct
+        const Self = @This();
+        pub fn then(self: *Self, callback: *const fn (Ref(T)) void) void {
+            if (self.callback != null) @panic(".then on promise that already has been .then-ed");
+            self.callback = callback;
+        }
+
+        pub fn resolve(self: Self) void {
+            if (self.callback == null) return;
+            self.callback.?(self.ref);
+        }
+    };
+}
+
+/// Reference for a value stored in ArrayList
+pub fn Ref(comptime T: type) type {
+    return struct {
+        list: *std.ArrayList(T),
+        index: usize,
+
+        const Self = @This();
+
+        pub fn get(self: Self) *T {
+            return &self.list.items[self.index];
         }
     };
 }

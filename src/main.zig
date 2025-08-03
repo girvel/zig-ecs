@@ -90,7 +90,7 @@ fn test_creation(target: Controllable) void {
     }
 }
 
-var original_player_character: toolkit.Ref(Entity) = undefined;
+var original_player_character: ecs.Ref(Entity) = undefined;
 
 fn debug() void {
     if (rl.isKeyPressed(.h)) {
@@ -122,19 +122,15 @@ pub fn main() !void {
         .sprite = &texture_storage.mannequin,
     });
 
-    world.plan_add(.{
+    world.promise_add(Entity, .{
         .position = i32_2.from(.{16, 0}),
         .sprite = &texture_storage.moose_dude,
         .player_flag = PlayerFlag{},
-    });
-
-    original_player_character = blk: {
-        const list = &world.entities_globally.lists[0];
-        break :blk toolkit.Ref(Entity) {
-            .list = list,
-            .index = list.items.len - 1,
-        };
-    };
+    }).then((struct {
+        fn call(ref: ecs.Ref(Entity)) void {
+            original_player_character = ref;
+        }
+    }).call);
 
     world.plan_add(.{
         .texture_storage = texture_storage,
