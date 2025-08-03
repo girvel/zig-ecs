@@ -111,7 +111,7 @@ pub fn World(comptime config: WorldConfig) type {
                     // TODO! handle optional fields
                 } else {
                     var subject: Entity = undefined;
-                    inline for (fields) |field| {
+                    inline for (fields) |field| {  // TODO! for anytype entity's fields, not Entity's
                         const storage_slice = @field(self.components, field.name).items;
                         const queue = @field(self.creation_queue, field.name).items;
                         @field(subject, field.name)
@@ -141,6 +141,7 @@ pub fn World(comptime config: WorldConfig) type {
                     inline for (&self.systems) |*system| {
                         system.shift_pointers(component.name, delta);
                     }
+                    self.shift_pointers(component.name, delta);
                 }
                 
                 creation_queue.clearRetainingCapacity();
@@ -158,6 +159,28 @@ pub fn World(comptime config: WorldConfig) type {
         pub fn update(self: *Self) void {
             inline for (&self.systems) |*system| {
                 system.update();
+            }
+        }
+
+        pub fn shift_pointers(
+            self: *Self, comptime dangling_component: [:0]const u8, delta: isize
+        ) void {
+            inline for (config.entities) |Entity| {
+                inline for (@typeInfo(Entity).@"struct".fields) |field| {
+                    const is_component_found = comptime std.mem.eql(
+                        u8, field.name, dangling_component
+                    );
+                    if (!is_component_found) continue;
+                    for (@field(self.entities, @typeName(Entity)).items) |*e| {
+                        const old_address: isize = @bitCast(@intFromPtr(
+                            @field(e, field.name)
+                        ));
+                        const new_address: isize = old_address + delta;
+                        const new_address_usize: usize = @bitCast(new_address);
+                        @field(e, field.name) = @ptrFromInt(new_address_usize);
+                    }
+                    break;
+                }
             }
         }
 

@@ -99,3 +99,19 @@ pub fn Struct(fields: []Field) type {
         .is_tuple = false,
     }});
 }
+
+pub fn Promise(comptime T: type) type {
+    return struct {
+        callback: ?fn (T) void = null,
+        const Self = @This();
+        pub fn then(self: *Self, callback: fn (T) void) void {
+            if (self.callback != null) @panic(".then on promise that already has been .then-ed");
+            self.callback = callback;
+        }
+
+        pub fn resolve(self: Self, value: T) void {
+            if (self.callback == null) return;
+            self.callback(value);
+        }
+    };
+}

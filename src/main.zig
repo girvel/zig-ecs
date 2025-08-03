@@ -25,8 +25,15 @@ const World = ecs.World(.{
 
 var world: World = undefined;
 
+var once = false;
 fn flush_creation_queue() void {
+    if (!once) std.debug.print("{any}\n", .{world.entities_lengths});
     world.flush_add();
+    if (!once) {
+        std.debug.print("{any}\n", .{world.entities_lengths});
+        std.debug.print("{}\n", .{world.entities.@"main.Entity".items[0]});
+        once = true;
+    }
 }
 
 fn begin_drawing() void {
@@ -89,9 +96,17 @@ fn test_creation(target: Controllable) void {
     }
 }
 
+var original_player_character: *Entity = undefined;
+
 fn debug() void {
     if (rl.isKeyPressed(.h)) {
         std.debug.print("{}\n", .{world});
+    }
+
+    if (rl.isKeyPressed(.backspace)) {
+        std.debug.print("{*}\n", .{original_player_character.sprite.?});
+        original_player_character.sprite.?.* = &texture_storage.mannequin;
+        std.debug.print("{*}\n", .{original_player_character.sprite.?});
     }
 }
 
@@ -106,20 +121,25 @@ pub fn main() !void {
     world = World.init(allocator);
 
     texture_storage = .{
-        .moose_dude = try rl.loadTexture("assets/mannequin.png"),
-        .mannequin = try rl.loadTexture("assets/moose_dude.png"),
+        .moose_dude = try rl.loadTexture("assets/moose_dude.png"),
+        .mannequin = try rl.loadTexture("assets/mannequin.png"),
     };
 
     world.plan_add(.{
         .position = i32_2.from(.{0, 0}),
-        .sprite = &texture_storage.moose_dude,
+        .sprite = &texture_storage.mannequin,
     });
 
     world.plan_add(.{
         .position = i32_2.from(.{16, 0}),
-        .sprite = &texture_storage.mannequin,
+        .sprite = &texture_storage.moose_dude,
         .player_flag = PlayerFlag{},
     });
+
+    original_player_character = blk: {
+        const list = @field(world.entities, @typeName(Entity)).items;
+        break :blk &list[list.len - 1];
+    };
 
     world.plan_add(.{
         .texture_storage = texture_storage,
