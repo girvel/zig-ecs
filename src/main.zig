@@ -122,13 +122,15 @@ pub fn main() !void {
         .sprite = &texture_storage.mannequin,
     });
 
+    var test_reference: ecs.Ref(Entity) = undefined;
+
     world.promise_add(Entity, .{
         .position = i32_2.from(.{16, 0}),
         .sprite = &texture_storage.moose_dude,
         .player_flag = PlayerFlag{},
     }).then((struct {
         fn call(ref: ecs.Ref(Entity)) void {
-            original_player_character = ref;
+            test_reference = ref;
         }
     }).call);
 
