@@ -1,29 +1,6 @@
 const std = @import("std");
 
-pub fn Closure(comptime arg_types: []const type, comptime Return: type) type {
-    // const InnerFunction = @Type(.{ .@"fn" = .{
-    //     .calling_convention = .auto,
-    //     .is_generic = false,
-    //     .is_var_args = false,
-    //     .return_type = Return,
-    //     .params = params: {
-    //         var params: [arg_types.len + 1]std.builtin.Type.Fn.Param = undefined;
-    //         params[0] = .{
-    //             .is_generic = false,
-    //             .is_noalias = false,
-    //             .type = *anyopaque,
-    //         };
-    //         for (1.., arg_types) |i, Arg| {
-    //             params[i] = .{
-    //                 .is_generic = false,
-    //                 .is_noalias = false,
-    //                 .type = Arg,
-    //             };
-    //         }
-    //         break :params params;
-    //     },
-    // }});
-
+pub fn New(comptime arg_types: []const type, comptime Return: type) type {
     const Args = std.meta.Tuple(arg_types);
 
     return struct {
@@ -71,6 +48,21 @@ pub fn Closure(comptime arg_types: []const type, comptime Return: type) type {
     };
 }
 
+fn analyze(comptime Implementation: type) type {
+    const invoke_signature = @typeInfo(@TypeOf(Implementation.invoke)).@"fn";
+    var arg_types: [invoke_signature.params.len - 1]type = undefined;
+    for (&arg_types, 1..) |*Arg, i| {
+        Arg.* = invoke_signature.params[i].type.?;
+    }
+    return New(&arg_types, invoke_signature.return_type.?);
+}
+
+pub fn init(
+    allocator: std.mem.Allocator, implementation: anytype,
+) !analyze(@TypeOf(implementation)) {
+    return analyze(@TypeOf(implementation)).init(allocator, implementation);
+}
+
 test {
     const allocator = std.testing.allocator;
 
@@ -80,11 +72,11 @@ test {
             return b * b - 2 * self.a * c;
         }
     };
-    const RequiredClosure = Closure(&.{i32, i32}, i32);
+    const RequiredClosure = New(&.{i32, i32}, i32);
     
     var result: [10]RequiredClosure = undefined;
     for (&result, 0..) |*closure, i| {
-        closure.* = try RequiredClosure.init(allocator, Base {
+        closure.* = try init(allocator, Base {
             .a = @intCast(i),
         });
     }
