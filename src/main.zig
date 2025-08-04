@@ -1,3 +1,4 @@
+const closure = @import("ecs/closure.zig");
 const std = @import("std");
 const rl = @import("raylib");
 const vector = @import("vector.zig");
@@ -128,11 +129,12 @@ pub fn main() !void {
         .position = i32_2.from(.{16, 0}),
         .sprite = &texture_storage.moose_dude,
         .player_flag = PlayerFlag{},
-    }).then((struct {
-        fn call(ref: ecs.Ref(Entity)) void {
-            test_reference = ref;
+    }).then(try closure.init(allocator, struct {
+        ref: *ecs.Ref(Entity),
+        pub fn invoke(self: *@This(), ref: ecs.Ref(Entity)) void {
+            self.ref.* = ref;
         }
-    }).call);
+    }{.ref = &test_reference}));
 
     world.plan_add(.{
         .texture_storage = texture_storage,

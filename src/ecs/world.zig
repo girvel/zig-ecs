@@ -1,3 +1,4 @@
+const closure = @import("closure.zig");
 const entity_storage = @import("entity_storage.zig");
 const toolkit = @import("../toolkit.zig");
 const common = @import("common.zig");
@@ -147,7 +148,7 @@ pub fn World(comptime config: WorldConfig) type {
             self.entities_globally.flush_add();
 
             inline for (&self.promises) |*promise_list| {
-                for (promise_list.items) |promise| {
+                for (promise_list.items) |*promise| {
                     promise.resolve();
                 }
 
@@ -188,17 +189,21 @@ pub fn World(comptime config: WorldConfig) type {
 
 pub fn Promise(comptime T: type) type {
     return struct {
+        const Callback = closure.New(&.{Ref(T)}, void);
         ref: Ref(T),
-        callback: ?*const fn (Ref(T)) void = null,  // TODO use struct
+        callback: ?Callback = null,
         const Self = @This();
-        pub fn then(self: *Self, callback: *const fn (Ref(T)) void) void {
+        pub fn then(self: *Self, callback: Callback) void {
             if (self.callback != null) @panic(".then on promise that already has been .then-ed");
             self.callback = callback;
         }
 
-        pub fn resolve(self: Self) void {
-            if (self.callback == null) return;
-            self.callback.?(self.ref);
+        pub fn resolve(self: *Self) void {
+            if (self.callback) |*callback| {
+                callback.invoke(.{self.ref});
+                callback.deinit();
+            }
+            self.callback = null;
         }
     };
 }
